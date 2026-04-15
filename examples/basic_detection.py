@@ -7,9 +7,9 @@ import torch
 from PIL import Image
 import argparse
 
-from traffic_pipeline.utils.model_loader import load_detection_model
-from traffic_pipeline.object_detection.object_detector import ObjectDetector
-from traffic_pipeline.utils.visualization import draw_detections
+from alert_system.utils.model_loader import load_detection_model
+from alert_system.object_detection.object_detector import ObjectDetector
+from alert_system.utils.visualization import draw_detections
 
 
 def main(image_path: str, threshold: float = 0.9):

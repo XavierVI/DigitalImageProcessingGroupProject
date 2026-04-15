@@ -11,11 +11,11 @@ import argparse
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from traffic_pipeline.utils.model_loader import load_detection_model, load_llm_model
-from traffic_pipeline.object_detection.object_detector import ObjectDetector
-from traffic_pipeline.llm.prompt_constructor import PromptConstructor
-from traffic_pipeline.llm.commentary_generator import CommentaryGenerator
-from traffic_pipeline.pipeline.data_pipeline import DataPipeline
+from alert_system.utils.model_loader import load_detection_model, load_llm_model
+from alert_system.object_detection.object_detector import ObjectDetector
+from alert_system.llm.prompt_constructor import PromptConstructor
+from alert_system.llm.commentary_generator import CommentaryGenerator
+from alert_system.pipeline.data_pipeline import DataPipeline
 
 
 def main(image_path: str, threshold: float = 0.9):

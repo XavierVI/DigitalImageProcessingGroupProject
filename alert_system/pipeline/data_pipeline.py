@@ -3,10 +3,10 @@
 from typing import List, Dict, Optional, Tuple
 from PIL import Image
 
-from traffic_pipeline.object_detection.object_detector import ObjectDetector
-from traffic_pipeline.pipeline.motion_analyzer import MotionAnalyzer
-from traffic_pipeline.llm.prompt_constructor import PromptConstructor
-from traffic_pipeline.llm.commentary_generator import CommentaryGenerator
+from alert_system.object_detection.object_detector import ObjectDetector
+from alert_system.pipeline.motion_analyzer import MotionAnalyzer
+from alert_system.llm.prompt_constructor import PromptConstructor
+from alert_system.llm.commentary_generator import CommentaryGenerator
 
 
 class DataPipeline:
