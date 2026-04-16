@@ -74,6 +74,7 @@ venv.bak/
 *.pt
 *.pth
 *.onnx
+*.mp4
 data/
 models/
 downloads/
