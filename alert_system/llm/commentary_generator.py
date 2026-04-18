@@ -1,7 +1,7 @@
 """Generate driver alerts and commentary using LLM models."""
 
 import torch
-from typing import Optional
+from typing import Optional, Dict
 
 
 class CommentaryGenerator:
