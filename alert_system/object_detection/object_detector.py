@@ -55,11 +55,13 @@ class ObjectDetector:
         # Extract detected objects
         detected_objects = []
         for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
-            box = [round(i, 2) for i in box.tolist()]
+            box_list = [round(coord, 2) for coord in box.tolist()]
+            centroid = self._compute_centroid(box_list)
             detected_objects.append({
                 "label": self.model.config.id2label[label.item()],
                 "score": round(score.item(), 3),
-                "box": box  # [xmin, ymin, xmax, ymax]
+                "box": box_list,  # [xmin, ymin, xmax, ymax]
+                "centroid": centroid,
             })
 
         return {
@@ -67,7 +69,7 @@ class ObjectDetector:
             "raw_results": results
         }
 
-    def detect_batch(self, images: List[Image.Image], threshold: float = 0.9) -> List[Dict]:
+    def detect_batch(self, image: Image.Image, threshold: float = 0.9) -> Dict:
         """Detect objects in multiple images.
 
         Args:
@@ -77,7 +79,59 @@ class ObjectDetector:
         Returns:
             list: List of detection results (one dict per image)
         """
-        results = []
-        for image in images:
-            results.append(self.detect(image, threshold))
-        return results
+        result = self.detect(image, threshold)
+        objects = result["objects"]
+
+        label_counts: Dict[str, int] = {}
+        total_confidence = 0.0
+
+        for obj in objects:
+            lbl = obj["label"]
+            label_counts[lbl] = label_counts.get(lbl, 0) + 1
+            total_confidence += obj["score"]
+
+        avg_confidence = (
+            round(total_confidence / len(objects), 3) if objects else 0.0
+        )
+
+        result["stats"] = {
+            "total objects": len(objects),
+            "unique labels": list(label_counts.keys()),
+            "avg confidence": avg_confidence,
+            "label counts": label_counts,
+        }
+        return result
+
+    def get_objects_by_label(
+            self,
+            image: Image.Image,
+            label: str,
+            threshold: float = 0.9,
+    ) -> List[Dict]:
+        """Return only detections that match a specific label.
+        Args:
+            image (PIL.Image): Input image.
+            label (str): Class name to filter by (case-insensitive).
+            threshold (float): Confidence threshold.
+
+        Returns:
+            list[dict]: Filtered detection list.
+        """
+        result = self.detect(image, threshold)
+        return [
+            obj for obj in result["objects"]
+            if obj["label"].lower() == label.lower()
+        ]
+
+    def _compute_centroid(box: List[float]) -> List[float]:
+        """Compute the centroid of a bounding box.
+        Args:
+            box (list): [xmin, ymin, xmax, ymax] in pixel coordinates.
+
+        Returns:
+            list: [cx, cy] rounded to 2 decimal places.
+        """
+        xmin, ymin, xmax, ymax = box
+        cx = round((xmin + xmax) / 2, 2)
+        cy = round((ymin + ymax) / 2, 2)
+        return [cx, cy]
