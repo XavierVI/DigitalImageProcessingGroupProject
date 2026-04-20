@@ -72,7 +72,7 @@ dataset = VideoDataset(root_dir=reddit_videos)
 # TODO: load the labels for evaluation.
 
 # open a video
-dataset[0]
+dataset[5]
 
 ob_det_processor, ob_det_model, llm_tokenizer, llm_model = load_models(device=device)
 

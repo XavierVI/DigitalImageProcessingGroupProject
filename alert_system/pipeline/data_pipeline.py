@@ -166,11 +166,24 @@ class DataPipeline:
         @param F_prev: list of detected objects in the previous frame.
         @param F: list of detected objects in the current frame.
         """
-        # Extract centroids into (K, 2) arrays
-        # N is number of objects in current frame, M is previous frame
-        curr_centroids = np.array([obj["centroid"] for obj in F])
-        prev_centroids = np.array([obj_prev["centroid"]
-                                  for obj_prev in F_prev])
+        if not F:
+            return F
+
+        if not F_prev:
+            for obj in F:
+                obj["velocity"] = (0, 0)
+            return F
+
+        # Extract centroids into (K, 2) arrays.
+        # N is number of objects in current frame, M is previous frame.
+        curr_centroids = np.array(
+            [obj["centroid"] for obj in F],
+            dtype=np.float32,
+        ).reshape(-1, 2)
+        prev_centroids = np.array(
+            [obj_prev["centroid"] for obj_prev in F_prev],
+            dtype=np.float32,
+        ).reshape(-1, 2)
 
         # Compute the distance between object N and M
         # Shape: (N, 1, 2) - (1, M, 2) -> (N, M, 2)
