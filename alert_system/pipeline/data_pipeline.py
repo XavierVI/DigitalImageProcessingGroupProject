@@ -9,7 +9,6 @@ from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
 from alert_system.data_stream.dataset import VideoDataset
 from alert_system.object_detection.object_detector import ObjectDetector
-from alert_system.pipeline.motion_analyzer import MotionAnalyzer
 from alert_system.llm.prompt_constructor import PromptConstructor
 from alert_system.llm.commentary_generator import CommentaryGenerator
 
