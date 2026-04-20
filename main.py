@@ -69,6 +69,7 @@ def load_models(device):
 device = "cuda" if torch.cuda.is_available() else "cpu"
 reddit_videos = './data/reddit_dashcam_videos/'
 dataset = VideoDataset(root_dir=reddit_videos)
+# TODO: load the labels for evaluation.
 
 # open a video
 dataset[0]
@@ -93,4 +94,16 @@ pipeline = DataPipeline(
 # print(frame.shape)
 # print(pipeline._obj_detection(frame))
 
-pipeline.loop(visualize=True)
+# TODO: in the future, we are going to wrap this code in a loop
+llm_output = pipeline.loop(visualize=True)
+
+# turn output into dict { "vid_1": ["red_light", "night"] }
+# for simplicity, we just split all the commentary into words
+model_outputs = {}
+full_output = []
+
+for timestep, commentary in llm_output:
+    tags = commentary.split()
+    full_output += tags
+
+model_outputs[dataset.get_video_name(0)] = full_output

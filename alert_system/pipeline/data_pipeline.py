@@ -49,6 +49,9 @@ class DataPipeline:
         # Each frame is going to be a list of detected objects
         # with their centroids and motion vectors
         self.frames = []
+        # this saves the LLM output for each timestep.
+        # format of each entry is (timestep, commentary)
+        self.llm_commentary = []
 
     def _append_frame(self, frame):
         # maintain the sliding window
@@ -56,6 +59,10 @@ class DataPipeline:
             self.frames.pop(0)
 
         self.frames.append(frame)
+
+    def reset(self):
+        self.frames = []
+        self.llm_commentary = []
 
     def _visualize_frame(self, frame, detected_obj):
         # Draw into a copy so we do not mutate the original frame.
@@ -229,7 +236,7 @@ class DataPipeline:
         @param visualize: if True, visualize the detections and motion vectors
             over time.
         """
-        print("Starting data pipeline loop...")
+        # print("Starting data pipeline loop...")
         while True:
             # collect frames
             # push the first frame
@@ -260,7 +267,10 @@ class DataPipeline:
 
             # generate commentary
             commentary = self.generate_commentary()
-            print("Commentary:", commentary)
+            # print("Commentary:", commentary)
+            self.llm_commentary.append((len(self.frames), commentary))
 
         if visualize:
             cv2.destroyAllWindows()
+
+        return self.llm_commentary

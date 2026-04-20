@@ -47,6 +47,12 @@ class VideoDataset(torch.utils.data.Dataset):
 
         return success, frame
 
+    def get_video_name(self, idx):
+        """
+        Get the name of the video at index idx.
+        """
+        return self.files[idx]
+
     def __len__(self):
         """
         Can we get the number of frames in the
