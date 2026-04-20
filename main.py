@@ -12,6 +12,42 @@ from transformers import DetrImageProcessor, DetrForObjectDetection, AutoTokeniz
 from transformers import RTDetrForObjectDetection, RTDetrImageProcessor
 
 
+def calculate_metrics(manual_labels, model_outputs):
+    """
+    manual_labels: dict { "vid_1": ["red_light", "night"] }
+    model_outputs: dict { "vid_1": ["red_light", "intersection"] }
+
+    The outputs can just be the words split up by spaces.
+    """
+    results = {}
+
+    for vid, gt_tags in manual_labels.items():
+        if vid not in model_outputs:
+            continue
+
+        pred_tags = set(model_outputs[vid])
+        gt_tags = set(gt_tags)
+
+        # Intersection over Union (Jaccard)
+        intersection = gt_tags.intersection(pred_tags)
+        union = gt_tags.union(pred_tags)
+        jaccard = len(intersection) / len(union) if union else 0
+
+        # Precision (How many predicted tags were right?)
+        precision = len(intersection) / len(pred_tags) if pred_tags else 0
+
+        # Recall (How many ground truth tags did we find?)
+        recall = len(intersection) / len(gt_tags) if gt_tags else 0
+
+        results[vid] = {
+            "jaccard": round(jaccard, 3),
+            "precision": round(precision, 3),
+            "recall": round(recall, 3)
+        }
+
+    return results
+
+
 def load_models(device):
     # loading models
     # Load Object Detection Model (DETR)
@@ -35,7 +71,7 @@ reddit_videos = './data/reddit_dashcam_videos/'
 dataset = VideoDataset(root_dir=reddit_videos)
 
 # open a video
-dataset[7]
+dataset[0]
 
 ob_det_processor, ob_det_model, llm_tokenizer, llm_model = load_models(device=device)
 
@@ -57,4 +93,4 @@ pipeline = DataPipeline(
 # print(frame.shape)
 # print(pipeline._obj_detection(frame))
 
-pipeline.loop(visualize=False)
+pipeline.loop(visualize=True)
