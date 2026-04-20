@@ -1,8 +1,13 @@
 """End-to-end data pipeline combining object detection, motion analysis, and LLM commentary."""
 
 from typing import List, Dict, Optional, Tuple
-from PIL import Image
 
+import cv2
+import numpy as np
+import torch
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+
+from alert_system.data_stream.dataset import VideoDataset
 from alert_system.object_detection.object_detector import ObjectDetector
 from alert_system.pipeline.motion_analyzer import MotionAnalyzer
 from alert_system.llm.prompt_constructor import PromptConstructor
@@ -10,139 +15,253 @@ from alert_system.llm.commentary_generator import CommentaryGenerator
 
 
 class DataPipeline:
-    """End-to-end pipeline for processing images and generating driver alerts.
+    """
+    A pipeline for processing images and generating commentary using
+    a pre-trained object detection model and a small LLM.
 
-    Orchestrates object detection, motion analysis, prompt construction, and LLM inference.
-
-    Args:
-        object_detector: ObjectDetector instance
-        motion_analyzer: MotionAnalyzer class/methods
-        prompt_constructor: PromptConstructor instance
-        commentary_generator: CommentaryGenerator instance
+    @param datastream: an instance of VideoDataset to read
+        video frames.
+    @param image_processor: an instance of DetrImageProcessor
+        to process images.
+    @param object_detection_model: an instance of DetrForObjectDetection
+        to detect objects in images.
+    @param llm_tokenizer: an instance of AutoTokenizer
+        to tokenize prompts for the LLM.
+    @param llm_model: an instance of AutoModelForSeq2SeqLM
+        to generate commentary for the LLM.
     """
 
     def __init__(
-        self,
-        object_detector: ObjectDetector,
-        prompt_constructor: PromptConstructor,
-        commentary_generator: CommentaryGenerator,
-        detection_threshold: float = 0.9
-    ):
-        """Initialize the data pipeline.
+            self, datastream: VideoDataset,
+            image_processor, object_detection_model,
+            llm_tokenizer, llm_model, device,
+            window_size=10):
+        self.image_processor = image_processor
+        self.object_detection_model = object_detection_model
 
-        Args:
-            object_detector: Detector for objects in images
-            prompt_constructor: Constructs LLM prompts from detection data
-            commentary_generator: Generates text from prompts
-            detection_threshold: Confidence threshold for object detection
-        """
-        self.object_detector = object_detector
-        self.motion_analyzer = MotionAnalyzer()
-        self.prompt_constructor = prompt_constructor
-        self.commentary_generator = commentary_generator
-        self.detection_threshold = detection_threshold
+        self.llm_tokenizer = llm_tokenizer
+        self.llm_model = llm_model
 
-        # History for motion tracking across frames
-        self.prev_detections = None
+        self.window_size = window_size
+        self.datastream = datastream
+        self.device = device
 
-    def process_frame(self, image: Image.Image) -> Dict:
-        """Process a single frame: detect objects and generate commentary.
+        # Stores up to window_size frames
+        # Each frame is going to be a list of detected objects
+        # with their centroids and motion vectors
+        self.frames = []
 
-        Args:
-            image (PIL.Image): Input image
+    def _append_frame(self, frame):
+        # maintain the sliding window
+        if len(self.frames) > self.window_size:
+            self.frames.pop(0)
 
-        Returns:
-            dict: Contains 'detections', 'motion', 'prompt', 'commentary'
-        """
-        # Step 1: Detect objects
-        detection_results = self.object_detector.detect(image, self.detection_threshold)
-        detections = detection_results["objects"]
+        self.frames.append(frame)
 
-        # Step 2: Compute motion if we have previous frame
-        motion_data = []
-        if self.prev_detections is not None:
-            motion_data = self.motion_analyzer.compute_motion_from_objects(
-                self.prev_detections,
-                detections
+    def _visualize_frame(self, frame, detected_obj):
+        # Draw into a copy so we do not mutate the original frame.
+        annotated = frame.copy()
+
+        for obj in detected_obj:
+            bx = [int(i) for i in obj["box"]]
+            cv2.rectangle(
+                annotated,
+                (bx[0], bx[1]),
+                (bx[2], bx[3]),
+                (255, 0, 0),
+                2,
             )
 
-        # Step 3: Construct prompt
-        if motion_data:
-            prompt = self.prompt_constructor.construct_from_motion(detections, motion_data)
-        else:
-            prompt = self.prompt_constructor.construct_from_objects(detections)
+            c = tuple(map(int, obj["centroid"]))
+            m = obj.get("velocity", (0, 0))
+            end_point = (int(c[0] + m[0]), int(c[1] + m[1]))
+            if end_point != c:
+                cv2.arrowedLine(
+                    annotated,
+                    c,
+                    end_point,
+                    (0, 255, 0),
+                    2,
+                    tipLength=0.3,
+                )
 
-        # Step 4: Generate commentary
-        commentary = self.commentary_generator.generate(prompt)
+            cv2.putText(
+                annotated,
+                str(obj["label"]),
+                (bx[0], max(20, bx[1] - 10)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                (255, 0, 0),
+                2,
+                cv2.LINE_AA,
+            )
 
-        # Update history
-        self.prev_detections = detections
+        # Fast real-time rendering for video playback.
+        cv2.imshow("Alert System", annotated)
+        cv2.waitKey(1)
 
-        return {
-            "detections": detections,
-            "motion": motion_data,
-            "prompt": prompt,
-            "commentary": commentary
-        }
+    def _obj_detection(self, frame):
+        # Preprocess image and perform inference
+        inputs = self.image_processor(
+            images=frame, return_tensors="pt").to(self.device)
+        # print("Inputs:", inputs)
+        outputs = self.object_detection_model(**inputs)
+        # print("Outputs:", outputs)
 
-    def process_frames_batch(self, images: List[Image.Image]) -> List[Dict]:
-        """Process multiple frames sequentially.
+        # Post-process outputs to get detected objects
+        # convert outputs (bounding boxes and class logits) to COCO format
+        # target_sizes = torch.tensor([frame.shape[::-1]])
+        target_sizes = torch.tensor([frame.shape[:2]], device=self.device)
+        # print("Target sizes:", target_sizes)
+        results = self.image_processor.post_process_object_detection(
+            outputs,
+            target_sizes=target_sizes,
+            threshold=0.9
+        )[0]
+        # print("Results:", results)
 
-        Args:
-            images: List of PIL Images
+        # returns tensors
+        boxes = results["boxes"]
+        scores = results["scores"]
+        labels = results["labels"]
 
-        Returns:
-            list: List of processing results
+        # vectorized centroid calculation: (xmin, ymin) + (xmax, ymax) / 2
+        centroids = (boxes[:, :2] + boxes[:, 2:]) / 2.0
+
+        # convert tensors to lists for easier handling
+        boxes_list = torch.round(boxes, decimals=2).tolist()
+        scores_list = torch.round(scores, decimals=3).tolist()
+        centroids_list = torch.round(centroids, decimals=2).tolist()
+        labels_list = labels.tolist()
+        id2label = self.object_detection_model.config.id2label
+
+        # Bulk construct the list of dictionaries via standard zip
+        detected_objects = [
+            {
+                "label": id2label[lbl],
+                "score": sc,
+                "box": bx,
+                "centroid": ct
+            }
+            for lbl, sc, bx, ct in
+            zip(labels_list, scores_list, boxes_list, centroids_list)
+        ]
+
+        return detected_objects
+
+    def _compute_motion(self, F_prev, F):
         """
-        results = []
-        for image in images:
-            results.append(self.process_frame(image))
-        return results
+        Compute the motion of each object between two frames.
 
-    def process_video_frames(
-        self,
-        frames: List,
-        skip_frames: int = 1
-    ) -> List[Dict]:
-        """Process frames from a video.
+        It is expected that the frames are lists of detected objects.
+        Each detected object is a dictionary with their numerical ID,
+        boxes, centroid, and score.
 
-        Args:
-            frames: List of frames (numpy arrays in BGR format)
-            skip_frames: Process only every nth frame
-
-        Returns:
-            list: List of processing results
+        @param F_prev: list of detected objects in the previous frame.
+        @param F: list of detected objects in the current frame.
         """
-        results = []
-        for idx, frame in enumerate(frames):
-            if idx % skip_frames != 0:
-                continue
+        # Extract centroids into (K, 2) arrays
+        # N is number of objects in current frame, M is previous frame
+        curr_centroids = np.array([obj["centroid"] for obj in F])
+        prev_centroids = np.array([obj_prev["centroid"]
+                                  for obj_prev in F_prev])
 
-            # Convert BGR to RGB
-            import cv2
-            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            image = Image.fromarray(rgb_frame)
+        # Compute the distance between object N and M
+        # Shape: (N, 1, 2) - (1, M, 2) -> (N, M, 2)
+        diff = curr_centroids[:, np.newaxis, :] - \
+            prev_centroids[np.newaxis, :, :]
+        dist_matrix = np.linalg.norm(diff, axis=2)  # Shape: (N, M)
 
-            results.append(self.process_frame(image))
+        # Find index of minimum distance for each object in current frame
+        min_dist_indices = np.argmin(dist_matrix, axis=1)
+        min_distances = dist_matrix[np.arange(len(F)), min_dist_indices]
 
-        return results
+        # Assign motion vectors
+        threshold = 50
+        for i, obj in enumerate(F):
+            idx_prev = min_dist_indices[i]
+            dist = min_distances[i]
 
-    def reset_history(self):
-        """Reset motion tracking history (useful for new video sequences)."""
-        self.prev_detections = None
+            if dist < threshold:
+                # Use the pre-computed 'diff' to get the motion vector
+                # diff[i, idx_prev] is (curr - prev)
+                obj["velocity"] = tuple(diff[i, idx_prev].tolist())
+            else:
+                obj["velocity"] = (0, 0)
 
-    def step(self):
-        """Legacy method for compatibility with notebook code.
+        return F
 
-        Process a single image and serialize information for future use.
-        """
-        # This would be implemented with specific image source in actual usage
-        pass
+    def build_prompt(self):
+        template = "Generate commentary for the following traffic scene:\n\n"
+        for i, frame in enumerate(self.frames):
+            template += f"Frame {i+1}:\n"
+            for obj in frame:
+                label = obj['label']
+                score = obj['score']
+                velocity = obj.get('velocity', (0, 0))
+                template += f"- Detected a {label} with confidence {score:.2f} and velocity {velocity}\n"
+            template += "\n"
+        template += "Provide a concise summary of the traffic scene, including any notable events or interactions between objects."
+        template += "Warn the user of any potential hazards or interesting occurrences in the scene."
+        return template
 
     def generate_commentary(self):
-        """Legacy method for compatibility with notebook code.
-
+        """
         Generate commentary using time series data.
         """
-        # This would aggregate time series data from previous steps
-        pass
+        # build prompt
+        prompt = self.build_prompt()
+
+        # print("Prompt for LLM:", prompt)
+        # tokenize and generate commentary
+        inputs = self.llm_tokenizer(prompt, return_tensors="pt").to(self.device)
+        outputs = self.llm_model.generate(**inputs, max_length=200)
+        commentary = self.llm_tokenizer.decode(
+            outputs[0], skip_special_tokens=True)
+        return commentary
+
+    def loop(self, visualize=False):
+        """
+        A loop that runs the pipeline
+        indefinitely (or until the data stream ends).
+
+        It uses a sliding window for tracking objects.
+
+        @param visualize: if True, visualize the detections and motion vectors
+            over time.
+        """
+        print("Starting data pipeline loop...")
+        while True:
+            # collect frames
+            # push the first frame
+            success, frame = self.datastream.step()
+            if not success:
+                break
+            # perform object detection
+            # this returns a list of dictionaries with keys
+            # "label", "score", "box", and "centroid"
+            detected_obj = self._obj_detection(frame)
+            self._append_frame(detected_obj)
+
+            if visualize:
+                self._visualize_frame(frame, detected_obj)
+
+            for i in range(self.window_size):
+                success, frame = self.datastream.step()
+                if not success:
+                    break
+
+                detected_obj = self._obj_detection(frame)
+                detected_obj = self._compute_motion(
+                    self.frames[-1], detected_obj)
+                self._append_frame(detected_obj)
+
+                if visualize:
+                    self._visualize_frame(frame, detected_obj)
+
+            # generate commentary
+            commentary = self.generate_commentary()
+            print("Commentary:", commentary)
+
+        if visualize:
+            cv2.destroyAllWindows()
