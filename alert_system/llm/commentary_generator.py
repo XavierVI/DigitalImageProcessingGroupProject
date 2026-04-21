@@ -55,16 +55,26 @@ class CommentaryGenerator:
         """
         max_tokens = max_new_tokens or self.max_new_tokens
 
-        # Tokenize input
-        inputs = self.tokenizer(prompt, return_tensors="pt").to(self.device)
+        # Tokenize input with truncation for models like flan-t5-small (max length 512).
+        model_max_len = getattr(self.tokenizer, "model_max_length", 512)
+        safe_max_len = min(model_max_len, 512)
+        inputs = self.tokenizer(
+            prompt,
+            return_tensors="pt",
+            truncation=True,
+            max_length=safe_max_len,
+        ).to(self.device)
 
         # Generate text
         with torch.no_grad():
             outputs = self.model.generate(
                 inputs["input_ids"],
+                attention_mask=inputs.get("attention_mask"),
                 max_new_tokens=max_tokens,
                 num_beams=self.num_beams,
-                early_stopping=self.early_stopping
+                early_stopping=self.early_stopping,
+                no_repeat_ngram_size=3,
+                repetition_penalty=1.15,
             )
 
         # Decode output

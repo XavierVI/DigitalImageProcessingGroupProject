@@ -11,6 +11,7 @@ import argparse
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
+# google/flan-t5-small
 from alert_system.utils.model_loader import load_detection_model, load_llm_model
 from alert_system.object_detection.object_detector import ObjectDetector
 from alert_system.llm.prompt_constructor import PromptConstructor

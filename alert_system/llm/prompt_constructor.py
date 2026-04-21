@@ -1,7 +1,7 @@
 """Construct prompts for the LLM from object detection and motion data."""
 
-from typing import List, Dict, Any
 import json
+from typing import List, Dict
 
 
 class PromptConstructor:
@@ -19,6 +19,49 @@ class PromptConstructor:
         """
         self.context = context
 
+    def _build_driver_guidance_header(self) -> str:
+        """Return the shared instruction block for driver-facing commentary."""
+        return (
+            f"You are an in-car {self.context} copilot. "
+            f"Give short, practical driver guidance using only provided detections. "
+            f"Prioritize safety-critical items first. "
+            f"If a traffic light is detected but its color is not explicitly provided in the input, "
+            f"say that the color cannot be determined from the current data instead of guessing. "
+            f"Do not invent objects or states that are not in the detections."
+        )
+
+    @staticmethod
+    def _summarize_scene(detected_objects: List[Dict]) -> Dict:
+        """Create a compact scene summary for the prompt."""
+        counts: Dict[str, int] = {}
+        for obj in detected_objects:
+            label = obj.get("label", "unknown")
+            counts[label] = counts.get(label, 0) + 1
+
+        priority_order = ["person", "traffic light", "stop sign", "truck", "car", "bus", "bicycle"]
+        unique_labels = list(counts.keys())
+        unique_labels.sort(key=lambda lbl: (priority_order.index(lbl) if lbl in priority_order else 999, lbl))
+
+        return {
+            "total_detections": len(detected_objects),
+            "label_counts": counts,
+            "priority_labels": unique_labels[:6],
+        }
+
+    @staticmethod
+    def _format_detections(detected_objects: List[Dict]) -> str:
+        """Format detections as JSON for easier LLM parsing."""
+        payload = []
+        for obj in detected_objects[:6]:
+            item = {
+                "label": obj.get("label", "unknown"),
+                "confidence": obj.get("score", "unknown"),
+            }
+            if "color" in obj:
+                item["color"] = obj["color"]
+            payload.append(item)
+        return json.dumps(payload, indent=2)
+
     def construct_from_objects(self, detected_objects: List[Dict]) -> str:
         """Construct a prompt from detected objects.
 
@@ -29,19 +72,28 @@ class PromptConstructor:
             str: Formatted prompt for the LLM
         """
         if not detected_objects:
-            return "No objects detected in the current scene."
+            return (
+                self._build_driver_guidance_header()
+                + "\n\nNo objects were detected in the current scene. "
+                + "Respond briefly that the road appears clear based on the available data."
+            )
 
-        object_list = ", ".join([obj["label"] for obj in detected_objects])
-        object_desc = json.dumps(detected_objects[:5], indent=2)
+        scene_summary = self._summarize_scene(detected_objects)
+        object_desc = self._format_detections(detected_objects)
 
-        prompt = (
-            f"You are an assistant for a {self.context} system. "
-            f"Provide a professional summary of the scene. "
-            f"Detected objects: {object_list}. "
-            f"Details: {object_desc}."
+        return (
+            self._build_driver_guidance_header()
+            + "\n\nScene summary JSON:\n"
+            + json.dumps(scene_summary, indent=2)
+            + "\n\nTop detections JSON (source of truth):\n"
+            + "Treat this JSON as the source of truth:\n"
+            + object_desc
+            + "\n\nRequired response format:"
+            + "\n1. Road overview (one short sentence)."
+            + "\n2. Traffic controls ahead (sign/light and light color if known; otherwise unknown)."
+            + "\n3. Immediate action (one short sentence)."
+            + "\nKeep the full answer under 60 words."
         )
-
-        return prompt
 
     def construct_from_motion(
         self,
@@ -58,11 +110,16 @@ class PromptConstructor:
             str: Formatted prompt including motion information
         """
         if not detected_objects:
-            return "No objects detected in the current scene."
+            return (
+                self._build_driver_guidance_header()
+                + "\n\nNo objects were detected in the current scene. "
+                + "State that no immediate road objects are visible based on the current frame."
+            )
 
         prompt = (
-            f"You are an assistant for a {self.context} system. "
-            f"Analyze the scene and motion data to provide alerts. "
+            self._build_driver_guidance_header()
+            + "\n\nAnalyze the scene and motion data to provide driver alerts. "
+            + "Use motion to highlight objects that may require caution. "
         )
 
         # Add object information
@@ -71,12 +128,16 @@ class PromptConstructor:
                 motion = motion_data[i]
                 prompt += (
                     f"\n- {obj['label']} (confidence: {obj['score']}) "
-                    f"at position {obj['box']}, moving with velocity {motion.get('velocity', 'unknown')}. "
+                    f"at position {obj['box']}, moving with velocity {motion.get('velocity', 'unknown')}, "
+                    f"speed {motion.get('speed', 'unknown')}. "
                 )
             else:
                 prompt += f"\n- {obj['label']} (confidence: {obj['score']}) at position {obj['box']}. "
 
-        prompt += "\nProvide any necessary alerts or warnings for the driver."
+        prompt += (
+            "\n\nProvide a short driver-facing summary with the same required format: "
+            "road overview, traffic signs/lights, traffic-light color if known, and immediate action."
+        )
 
         return prompt
 
@@ -92,8 +153,10 @@ class PromptConstructor:
         Returns:
             str: Formatted prompt with temporal information
         """
-        prompt = f"You are an assistant for a {self.context} system. "\
-                 f"Analyze the temporal motion of objects and provide insights.\n"
+        prompt = (
+            self._build_driver_guidance_header()
+            + "\n\nAnalyze the temporal motion of objects and provide driver safety insights.\n"
+        )
 
         for obj_id, track in object_tracks.items():
             if track:
