@@ -123,7 +123,7 @@ class ObjectDetector:
             if obj["label"].lower() == label.lower()
         ]
 
-    def _compute_centroid(box: List[float]) -> List[float]:
+    def _compute_centroid(self, box: List[float]) -> List[float]:
         """Compute the centroid of a bounding box.
         Args:
             box (list): [xmin, ymin, xmax, ymax] in pixel coordinates.

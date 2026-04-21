@@ -7,6 +7,10 @@ import torch
 from PIL import Image
 import argparse
 
+# Add project to path for direct script execution
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
 from alert_system.utils.model_loader import load_detection_model
 from alert_system.object_detection.object_detector import ObjectDetector
 from alert_system.utils.visualization import draw_detections
