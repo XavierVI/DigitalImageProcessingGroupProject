@@ -7,12 +7,12 @@ import numpy as np
 import torch
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
-from alert_system.data_stream.dataset import VideoDataset
-from alert_system.object_detection.object_detector import ObjectDetector
-from alert_system.llm.prompt_constructor import PromptConstructor
-from alert_system.llm.commentary_generator import CommentaryGenerator
+from driving_assistant.data_utils.dataset import VideoDataset
+from driving_assistant.object_detection.object_detector import ObjectDetector
+from driving_assistant.llm.prompt_constructor import PromptConstructor
+from driving_assistant.llm.commentary_generator import CommentaryGenerator
 
-from alert_system.utils.visualization import visualize_frame
+from driving_assistant.utils.visualization import visualize_frame
 
 class DataPipeline:
     """
@@ -131,6 +131,7 @@ class DataPipeline:
             over time.
         """
         # print("Starting data pipeline loop...")
+        t = 0
         while True:
             # collect frames
             # push the first frame
@@ -158,11 +159,16 @@ class DataPipeline:
 
                 if visualize:
                     visualize_frame(frame, detected_obj)
+                t += 1
 
             # generate commentary
-            commentary = self.commentary_generator.generate()
+            prompt = self.prompt_constructor.generate_prompt(
+                self.frames,
+                t=t - len(self.frames)  # Pass the starting timestep of the window
+            )
+            commentary = self.commentary_generator.generate(prompt)
             # print("Commentary:", commentary)
-            self.llm_commentary.append((len(self.frames), commentary))
+            self.llm_commentary.append((t, commentary))
 
         if visualize:
             cv2.destroyAllWindows()

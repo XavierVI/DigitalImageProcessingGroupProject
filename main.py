@@ -5,8 +5,8 @@ This is the main script for running the project.
 """
 import torch
 
-from alert_system.data_stream.dataset import VideoDataset
-from alert_system.pipeline.data_pipeline import DataPipeline
+from driving_assistant.data_utils.dataset import VideoDataset
+from driving_assistant.pipeline.data_pipeline import DataPipeline
 
 from transformers import DetrImageProcessor, DetrForObjectDetection, AutoTokenizer, AutoModelForSeq2SeqLM
 from transformers import RTDetrForObjectDetection, RTDetrImageProcessor

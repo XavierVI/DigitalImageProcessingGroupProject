@@ -7,7 +7,7 @@ from typing import List, Dict, Tuple
 from PIL import Image
 
 
-def visualize_frame(self, frame, detected_obj):
+def visualize_frame(frame, detected_obj):
     # Draw into a copy so we do not mutate the original frame.
     annotated = frame.copy()
 

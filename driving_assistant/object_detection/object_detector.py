@@ -79,7 +79,6 @@ class ObjectDetector:
             List of detected objects with their labels, scores, bounding boxes, and centroids.
         """
         results = self.detection_func(frame, threshold=threshold)
-        print(f"Detection function {self.detection_func.__name__} returned {len(results)} objects.")
         return results
 
 
@@ -135,7 +134,6 @@ class ObjectDetector:
             for lbl, sc, bx, ct in
             zip(labels_list, scores_list, boxes_list, centroids_list)
         ]
-        print(f"Detected {len(detected_objects)} objects: {detected_objects}")
 
         return detected_objects
 
