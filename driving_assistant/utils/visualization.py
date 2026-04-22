@@ -1,9 +1,54 @@
 """Visualization utilities for object detection and motion analysis."""
 
+import cv2
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from typing import List, Dict, Tuple
 from PIL import Image
+
+
+def visualize_frame(self, frame, detected_obj):
+    # Draw into a copy so we do not mutate the original frame.
+    annotated = frame.copy()
+
+    for obj in detected_obj:
+        bx = [int(i) for i in obj["box"]]
+        cv2.rectangle(
+            annotated,
+            (bx[0], bx[1]),
+            (bx[2], bx[3]),
+            (255, 0, 0),
+            2,
+        )
+
+        c = tuple(map(int, obj["centroid"]))
+        m = obj.get("velocity", (0, 0))
+        end_point = (int(c[0] + m[0]), int(c[1] + m[1]))
+        if end_point != c:
+            cv2.arrowedLine(
+                annotated,
+                c,
+                end_point,
+                (0, 255, 0),
+                2,
+                tipLength=0.3,
+            )
+
+        cv2.putText(
+            annotated,
+            str(obj["label"]),
+            (bx[0], max(20, bx[1] - 10)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (255, 0, 0),
+            2,
+            cv2.LINE_AA,
+        )
+
+    # Fast real-time rendering for video playback.
+    cv2.imshow("Alert System", annotated)
+    cv2.waitKey(1)
+
 
 
 def draw_detections(

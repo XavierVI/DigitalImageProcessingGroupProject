@@ -3,6 +3,9 @@
 import torch
 from typing import Optional, Dict
 
+from transformers import T5Tokenizer, T5ForConditionalGeneration
+
+import os
 
 class CommentaryGenerator:
     """Generates natural language commentary from prompts using a pre-trained LLM.
@@ -18,8 +21,7 @@ class CommentaryGenerator:
 
     def __init__(
         self,
-        tokenizer,
-        model,
+        hugging_face_model: str = "google/flan-t5-small",
         device=None,
         max_new_tokens: int = 50,
         num_beams: int = 5,
@@ -28,22 +30,30 @@ class CommentaryGenerator:
         """Initialize the commentary generator.
 
         Args:
-            tokenizer: Hugging Face tokenizer
-            model: Seq2seq model (e.g., T5, BART)
+            hugging_face_model: Path or name of the Hugging Face model
             device: torch.device for inference
             max_new_tokens: Maximum length of generated text
             num_beams: Beam search parameter
             early_stopping: Whether to use early stopping
         """
-        self.tokenizer = tokenizer
-        self.model = model
+        
+        if hugging_face_model == "google/flan-t5-small":
+            self.tokenizer = T5Tokenizer.from_pretrained(
+                hugging_face_model,
+                cache_dir=os.path.join(os.getcwd(), "models")
+            )
+            self.model = T5ForConditionalGeneration.from_pretrained(
+                hugging_face_model,
+                cache_dir=os.path.join(os.getcwd(), "models")
+            ).to(device)
+
         self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model.to(self.device)
         self.max_new_tokens = max_new_tokens
         self.num_beams = num_beams
         self.early_stopping = early_stopping
 
-    def generate(self, prompt: str, max_new_tokens: Optional[int] = None) -> str:
+    def generate(self, prompt: str) -> str:
         """Generate commentary from a prompt.
 
         Args:
@@ -53,8 +63,6 @@ class CommentaryGenerator:
         Returns:
             str: Generated commentary text
         """
-        max_tokens = max_new_tokens or self.max_new_tokens
-
         # Tokenize input
         inputs = self.tokenizer(prompt, return_tensors="pt").to(self.device)
 
@@ -62,7 +70,7 @@ class CommentaryGenerator:
         with torch.no_grad():
             outputs = self.model.generate(
                 inputs["input_ids"],
-                max_new_tokens=max_tokens,
+                max_new_tokens=self.max_new_tokens,
                 num_beams=self.num_beams,
                 early_stopping=self.early_stopping
             )
@@ -71,28 +79,3 @@ class CommentaryGenerator:
         commentary = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
         return commentary
 
-    def generate_alert(self, prompt: str, urgency: str = "normal") -> Dict[str, str]:
-        """Generate an alert with urgency level.
-
-        Args:
-            prompt (str): Input prompt
-            urgency (str): 'low', 'normal', or 'high'
-
-        Returns:
-            dict: Dictionary with 'alert' and 'urgency' keys
-        """
-        # Adjust parameters based on urgency
-        if urgency == "high":
-            max_tokens = min(30, self.max_new_tokens)
-        elif urgency == "low":
-            max_tokens = self.max_new_tokens
-        else:
-            max_tokens = self.max_new_tokens
-
-        alert_prompt = f"[{urgency.upper()}] {prompt}"
-        commentary = self.generate(alert_prompt, max_tokens)
-
-        return {
-            "alert": commentary,
-            "urgency": urgency
-        }

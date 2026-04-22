@@ -21,3 +21,4 @@ opencv-python = ">=4.13.0.92, <5"
 transformers = ">=5.5.4, <6"
 yt-dlp = ">=2026.3.17, <2027"
 praw = ">=7.8.1, <8"
+driving_assistant  = { path = ".", editable = true}

@@ -12,6 +12,7 @@ from alert_system.object_detection.object_detector import ObjectDetector
 from alert_system.llm.prompt_constructor import PromptConstructor
 from alert_system.llm.commentary_generator import CommentaryGenerator
 
+from alert_system.utils.visualization import visualize_frame
 
 class DataPipeline:
     """
@@ -32,14 +33,14 @@ class DataPipeline:
 
     def __init__(
             self, datastream: VideoDataset,
-            image_processor, object_detection_model,
-            llm_tokenizer, llm_model, device,
-            window_size=10):
-        self.image_processor = image_processor
-        self.object_detection_model = object_detection_model
+            object_detection_model: ObjectDetector,
+            prompt_constructor: PromptConstructor,
+            commentary_generator: CommentaryGenerator,
+            device, window_size=10):
+        self.obj_detection_model = object_detection_model
 
-        self.llm_tokenizer = llm_tokenizer
-        self.llm_model = llm_model
+        self.prompt_constructor = prompt_constructor
+        self.commentary_generator = commentary_generator
 
         self.window_size = window_size
         self.datastream = datastream
@@ -63,97 +64,6 @@ class DataPipeline:
     def reset(self):
         self.frames = []
         self.llm_commentary = []
-
-    def _visualize_frame(self, frame, detected_obj):
-        # Draw into a copy so we do not mutate the original frame.
-        annotated = frame.copy()
-
-        for obj in detected_obj:
-            bx = [int(i) for i in obj["box"]]
-            cv2.rectangle(
-                annotated,
-                (bx[0], bx[1]),
-                (bx[2], bx[3]),
-                (255, 0, 0),
-                2,
-            )
-
-            c = tuple(map(int, obj["centroid"]))
-            m = obj.get("velocity", (0, 0))
-            end_point = (int(c[0] + m[0]), int(c[1] + m[1]))
-            if end_point != c:
-                cv2.arrowedLine(
-                    annotated,
-                    c,
-                    end_point,
-                    (0, 255, 0),
-                    2,
-                    tipLength=0.3,
-                )
-
-            cv2.putText(
-                annotated,
-                str(obj["label"]),
-                (bx[0], max(20, bx[1] - 10)),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,
-                (255, 0, 0),
-                2,
-                cv2.LINE_AA,
-            )
-
-        # Fast real-time rendering for video playback.
-        cv2.imshow("Alert System", annotated)
-        cv2.waitKey(1)
-
-    def _obj_detection(self, frame):
-        # Preprocess image and perform inference
-        inputs = self.image_processor(
-            images=frame, return_tensors="pt").to(self.device)
-        # print("Inputs:", inputs)
-        outputs = self.object_detection_model(**inputs)
-        # print("Outputs:", outputs)
-
-        # Post-process outputs to get detected objects
-        # convert outputs (bounding boxes and class logits) to COCO format
-        # target_sizes = torch.tensor([frame.shape[::-1]])
-        target_sizes = torch.tensor([frame.shape[:2]], device=self.device)
-        # print("Target sizes:", target_sizes)
-        results = self.image_processor.post_process_object_detection(
-            outputs,
-            target_sizes=target_sizes,
-            threshold=0.9
-        )[0]
-        # print("Results:", results)
-
-        # returns tensors
-        boxes = results["boxes"]
-        scores = results["scores"]
-        labels = results["labels"]
-
-        # vectorized centroid calculation: (xmin, ymin) + (xmax, ymax) / 2
-        centroids = (boxes[:, :2] + boxes[:, 2:]) / 2.0
-
-        # convert tensors to lists for easier handling
-        boxes_list = torch.round(boxes, decimals=2).tolist()
-        scores_list = torch.round(scores, decimals=3).tolist()
-        centroids_list = torch.round(centroids, decimals=2).tolist()
-        labels_list = labels.tolist()
-        id2label = self.object_detection_model.config.id2label
-
-        # Bulk construct the list of dictionaries via standard zip
-        detected_objects = [
-            {
-                "label": id2label[lbl],
-                "score": sc,
-                "box": bx,
-                "centroid": ct
-            }
-            for lbl, sc, bx, ct in
-            zip(labels_list, scores_list, boxes_list, centroids_list)
-        ]
-
-        return detected_objects
 
     def _compute_motion(self, F_prev, F):
         """
@@ -210,35 +120,6 @@ class DataPipeline:
 
         return F
 
-    def build_prompt(self):
-        template = "Generate commentary for the following traffic scene:\n\n"
-        for i, frame in enumerate(self.frames):
-            template += f"Frame {i+1}:\n"
-            for obj in frame:
-                label = obj['label']
-                score = obj['score']
-                velocity = obj.get('velocity', (0, 0))
-                template += f"- Detected a {label} with confidence {score:.2f} and velocity {velocity}\n"
-            template += "\n"
-        template += "Provide a concise summary of the traffic scene, including any notable events or interactions between objects."
-        template += "Warn the user of any potential hazards or interesting occurrences in the scene."
-        return template
-
-    def generate_commentary(self):
-        """
-        Generate commentary using time series data.
-        """
-        # build prompt
-        prompt = self.build_prompt()
-
-        # print("Prompt for LLM:", prompt)
-        # tokenize and generate commentary
-        inputs = self.llm_tokenizer(prompt, return_tensors="pt").to(self.device)
-        outputs = self.llm_model.generate(**inputs, max_length=200)
-        commentary = self.llm_tokenizer.decode(
-            outputs[0], skip_special_tokens=True)
-        return commentary
-
     def loop(self, visualize=False):
         """
         A loop that runs the pipeline
@@ -259,27 +140,27 @@ class DataPipeline:
             # perform object detection
             # this returns a list of dictionaries with keys
             # "label", "score", "box", and "centroid"
-            detected_obj = self._obj_detection(frame)
+            detected_obj = self.obj_detection_model.detect(frame)
             self._append_frame(detected_obj)
 
             if visualize:
-                self._visualize_frame(frame, detected_obj)
+                visualize_frame(frame, detected_obj)
 
             for i in range(self.window_size):
                 success, frame = self.datastream.step()
                 if not success:
                     break
 
-                detected_obj = self._obj_detection(frame)
+                detected_obj = self.obj_detection_model.detect(frame)
                 detected_obj = self._compute_motion(
                     self.frames[-1], detected_obj)
                 self._append_frame(detected_obj)
 
                 if visualize:
-                    self._visualize_frame(frame, detected_obj)
+                    visualize_frame(frame, detected_obj)
 
             # generate commentary
-            commentary = self.generate_commentary()
+            commentary = self.commentary_generator.generate()
             # print("Commentary:", commentary)
             self.llm_commentary.append((len(self.frames), commentary))
 
