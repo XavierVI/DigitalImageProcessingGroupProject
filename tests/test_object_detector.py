@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 from PIL import Image
 import torch
 
-from alert_system.object_detection.object_detector import ObjectDetector
+from driving_assistant.object_detection.object_detector import ObjectDetector
 
 
 def make_image(width=640, height=480):
