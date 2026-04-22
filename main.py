@@ -95,12 +95,19 @@ def run_pipeline_over_dataset(
 ) -> None:
     """Initialize pipeline components and evaluate all videos in the dataset."""
     keywords = [
-        "pedestrian",
-        "vehicle",
-        "bicycle",
-        "motorcycle",
-        "traffic light",
-        "stop sign",
+        # alert keywords
+        "caution", "warning", "attention", "danger", "watch out",
+
+        # object keywords
+        "pedestrian", "vehicle", "bicycle", "motorcycle",
+        "traffic light", "stop sign", "red light", "green light", "yellow light",
+
+        # action keywords
+        "slow down", "speed up", "turn left",
+        "turn right", "stop", "go",
+
+        # directions
+        "ahead", "left", "right", "behind",
     ]
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
