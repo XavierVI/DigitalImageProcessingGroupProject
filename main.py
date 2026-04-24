@@ -181,7 +181,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--llm-model",
-        default="google/flan-t5-small",
+        default="google/flan-t5-base",
         help="Hugging Face model id for commentary generation.",
     )
     parser.add_argument(

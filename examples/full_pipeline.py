@@ -29,7 +29,7 @@ def main(threshold: float = 0.9):
     # Create pipeline components
     detector = ObjectDetector("PekingU/rtdetr_r50vd", device=device)
     prompt_constructor = PromptConstructor(keywords)
-    commentary_generator = CommentaryGenerator("google/flan-t5-small", device=device)
+    commentary_generator = CommentaryGenerator("google/flan-t5-base", device=device)
 
     # load dataset
     path = os.path.join(os.getcwd(), "data", "reddit_dashcam_videos")
