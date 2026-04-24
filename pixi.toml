@@ -23,3 +23,6 @@ yt-dlp = ">=2026.3.17, <2027"
 praw = ">=7.8.1, <8"
 driving_assistant  = { path = ".", editable = true}
 pytest = ">=9.0.3, <10"
+accelerate = ">=1.13.0, <2"
+bitsandbytes = ">=0.49.2, <0.50"
+protobuf = ">=7.34.1, <8"
