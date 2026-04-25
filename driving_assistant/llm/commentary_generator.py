@@ -28,7 +28,7 @@ class CommentaryGenerator:
         self,
         hugging_face_model: str = "microsoft/Phi-3-mini-4k-instruct",
         device=None,
-        max_new_tokens: int = 80,
+        max_new_tokens: int = 300,
         num_beams: int = 5,
         early_stopping: bool = True
     ):
@@ -162,7 +162,13 @@ class CommentaryGenerator:
                 pad_token_id=self.tokenizer.eos_token_id
             )
         new_tokens = outputs[0][inputs["input_ids"].shape[1]:]
-        return self.tokenizer.decode(new_tokens, skip_special_tokens=True)
+        full_response = self.tokenizer.decode(new_tokens, skip_special_tokens=True)
+
+        # Extract only the final answer after </think>
+        if "</think>" in full_response:
+            full_response = full_response.split("</think>")[-1].strip()
+
+        return full_response
 
     def _t5_generate(self, prompt: str) -> str:
         """Generate commentary from a prompt.
