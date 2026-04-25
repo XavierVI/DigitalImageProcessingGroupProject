@@ -26,7 +26,7 @@ class CommentaryGenerator:
 
     def __init__(
         self,
-        hugging_face_model: str = "microsoft/Phi-3-mini-4k-instruct",
+        hugging_face_model: str = "google/flan-t5-small",
         device=None,
         max_new_tokens: int = 300,
         num_beams: int = 5,
@@ -53,7 +53,7 @@ class CommentaryGenerator:
             )
             self.commentary_method = self._t5_generate
 
-        elif hugging_face_model == "microsoft/Phi-3-mini-4k-instruct": #Phi - 3 - mini
+        elif hugging_face_model == "microsoft/Phi-3.5-mini-instruct": #Phi - 3 - mini
             self.tokenizer = AutoTokenizer.from_pretrained(
                 hugging_face_model,
                 cache_dir=os.path.join(os.getcwd(), "models"),
@@ -65,9 +65,10 @@ class CommentaryGenerator:
             self.model = AutoModelForCausalLM.from_pretrained(
                 hugging_face_model,
                 cache_dir=os.path.join(os.getcwd(), "models"),
-                torch_dtype=torch.float16,
+                dtype=torch.float16,
                 trust_remote_code=True,
-                attn_implementation = "eager"
+                attn_implementation = "eager",
+                # force_download = True
             )
             self.commentary_method = self.llm_generate
 
@@ -105,11 +106,16 @@ class CommentaryGenerator:
 
             self.commentary_method = self.llm_generate
 
+        elif hugging_face_model == "Qwen/Qwen2.5-1.5B-Instruct":
+            self.tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-1.5B-Instruct")
+            self.model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-1.5B-Instruct")
+            self.commentary_method = self.llm_generate
+
         else:
             raise ValueError(
                 f"Unsupported model: {hugging_face_model}. "
                 "Choose from: google/flan-t5-small, google/flan-t5-large, "
-                "microsoft/Phi-3-mini-4k-instruct, "
+                "microsoft/Phi-3.5-mini-instruct, "
                 "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B, "
                 "deepseek-ai/DeepSeek-V3.2"
             )

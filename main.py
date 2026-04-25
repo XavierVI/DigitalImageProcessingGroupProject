@@ -182,7 +182,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--llm-model",
-        default="microsoft/Phi-3-mini-4k-instruct",
+        default="google/flan-t5-small",
         help="Hugging Face model id for commentary generation.",
     )
     parser.add_argument(
