@@ -26,7 +26,7 @@ class CommentaryGenerator:
 
     def __init__(
         self,
-        hugging_face_model: str = "google/flan-t5-small",
+        hugging_face_model: str = "microsoft/Phi-3-mini-4k-instruct",
         device=None,
         max_new_tokens: int = 80,
         num_beams: int = 5,
@@ -41,19 +41,8 @@ class CommentaryGenerator:
             num_beams: Beam search parameter
             early_stopping: Whether to use early stopping
         """
-        
-        if hugging_face_model == "google/flan-t5-small":
-            self.tokenizer = AutoTokenizer.from_pretrained(
-                hugging_face_model,
-                cache_dir=os.path.join(os.getcwd(), "models")
-            )
-            self.model = AutoModelForSeq2SeqLM.from_pretrained(
-                hugging_face_model,
-                cache_dir=os.path.join(os.getcwd(), "models")
-            )
-            self.commentary_method = self._t5_generate
-        
-        elif hugging_face_model == "google/flan-t5-large":
+
+        if hugging_face_model in ("google/flan-t5-small", "google/flan-t5-large"):
             self.tokenizer = AutoTokenizer.from_pretrained(
                 hugging_face_model,
                 cache_dir=os.path.join(os.getcwd(), "models")
@@ -64,28 +53,41 @@ class CommentaryGenerator:
             )
             self.commentary_method = self._t5_generate
 
-        elif hugging_face_model == "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B":
-            # This architecture is natively supported (it's just Llama 3.1)
+        elif hugging_face_model == "microsoft/Phi-3-mini-4k-instruct": #Phi - 3 - mini
             self.tokenizer = AutoTokenizer.from_pretrained(
                 hugging_face_model,
-                cache_dir=os.path.join(os.getcwd(), "models")
+                cache_dir=os.path.join(os.getcwd(), "models"),
+                trust_remote_code=True
             )
-            
             if self.tokenizer.pad_token is None:
                 self.tokenizer.pad_token = self.tokenizer.eos_token
 
-            # 4-bit load is highly recommended for 16GB VRAM cards
+            self.model = AutoModelForCausalLM.from_pretrained(
+                hugging_face_model,
+                cache_dir=os.path.join(os.getcwd(), "models"),
+                torch_dtype=torch.float16,
+                trust_remote_code=True,
+                attn_implementation = "eager"
+            )
+            self.commentary_method = self.llm_generate
+
+        elif hugging_face_model == "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B":
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                hugging_face_model,
+                cache_dir=os.path.join(os.getcwd(), "models")
+            )
+            if self.tokenizer.pad_token is None:
+                self.tokenizer.pad_token = self.tokenizer.eos_token
             self.model = AutoModelForCausalLM.from_pretrained(
                 hugging_face_model,
                 cache_dir=os.path.join(os.getcwd(), "models"),
             )
-            self.commentary_method = self._deepseek_generate
-
+            self.commentary_method = self.llm_generate
 
         elif hugging_face_model == "deepseek-ai/DeepSeek-V3.2":
             quant_config = BitsAndBytesConfig(
                 load_in_4bit=True,
-                bnb_4bit_compute_dtype=torch.bfloat16,  # Optimized for RTX 50-series
+                bnb_4bit_compute_dtype=torch.bfloat16,
                 bnb_4bit_use_double_quant=True,
                 bnb_4bit_quant_type="nf4"
             )
@@ -94,14 +96,24 @@ class CommentaryGenerator:
                 cache_dir=os.path.join(os.getcwd(), "models"),
                 trust_remote_code=True
             )
-            self.model = AutoModelForCausalLM.from_pretrained(
-                hugging_face_model,
+            self.model = AutoModelForCausalLM.from_pretrained(hugging_face_model,
                 cache_dir=os.path.join(os.getcwd(), "models"),
                 quantization_config=quant_config,
-                device_map="auto",  # Automatically handles layer placement
-                trust_remote_code=True  # DeepSeek often uses custom attention kernels
+                device_map="auto",
+                trust_remote_code=True
             )
-            self.commentary_method = self._deepseek_generate
+
+            self.commentary_method = self.llm_generate
+
+        else:
+            raise ValueError(
+                f"Unsupported model: {hugging_face_model}. "
+                "Choose from: google/flan-t5-small, google/flan-t5-large, "
+                "microsoft/Phi-3-mini-4k-instruct, "
+                "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B, "
+                "deepseek-ai/DeepSeek-V3.2"
+            )
+
 
         self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model.to(self.device)
@@ -128,30 +140,29 @@ class CommentaryGenerator:
         """
         return self.commentary_method(prompt)
 
-    def _deepseek_generate(self, prompt: str) -> str:
+    def llm_generate(self, prompt: str) -> str:
         messages = [
-            {"role": "user", "content": f"{prompt}"},
+            {
+                "role": "system",
+                "content": "You are an expert driving assistant. Analyze the detected objects from dashcam footage and warn the driver about any immediate risks. Be specific about what the object is, where it is, and what action to take."
+            },
+            {"role": "user", "content": prompt}
         ]
-
         inputs = self.tokenizer.apply_chat_template(
             messages,
             add_generation_prompt=True,
-            tokenize=True,
-            pad_token_id=self.tokenizer.eos_token_id,
-            eos_token_id=self.tokenizer.eos_token_id,
-            temperature=0.3,
-            do_samples=True,
-            return_dict=True,
             return_tensors="pt",
+            return_dict = True
         ).to(self.device)
-
-        outputs = self.model.generate(**inputs, max_new_tokens=40)
-        commentary = self.tokenizer.batch_decode(
-            outputs[0][inputs["input_ids"].shape[1]:],
-            skip_special_tokens=True
-        )[0]
-
-        return commentary
+        with torch.no_grad():
+            outputs = self.model.generate(
+                **inputs,
+                max_new_tokens=self.max_new_tokens,
+                do_sample=False,
+                pad_token_id=self.tokenizer.eos_token_id
+            )
+        new_tokens = outputs[0][inputs["input_ids"].shape[1]:]
+        return self.tokenizer.decode(new_tokens, skip_special_tokens=True)
 
     def _t5_generate(self, prompt: str) -> str:
         """Generate commentary from a prompt.
