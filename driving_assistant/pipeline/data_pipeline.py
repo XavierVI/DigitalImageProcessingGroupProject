@@ -14,6 +14,11 @@ from driving_assistant.llm.commentary_generator import CommentaryGenerator
 
 from driving_assistant.utils.visualization import visualize_frame
 
+# for running the LLM in parallel
+from concurrent.futures import ThreadPoolExecutor
+import time
+import psutil
+
 class DataPipeline:
     """
     A pipeline for processing images and generating commentary using
@@ -120,7 +125,14 @@ class DataPipeline:
 
         return F
 
-    def loop(self, visualize=False):
+    def _timed_llm_generate(self, prompt: str) -> Tuple[str, float]:
+        start_time = time.time()
+        commentary = self.commentary_generator.generate(prompt)
+        end_time = time.time()
+        return commentary, end_time - start_time
+
+
+    def loop(self, visualize=False) -> List[Tuple[int, str]]:
         """
         A loop that runs the pipeline
         indefinitely (or until the data stream ends).
@@ -130,8 +142,16 @@ class DataPipeline:
         @param visualize: if True, visualize the detections and motion vectors
             over time.
         """
-        # print("Starting data pipeline loop...")
+        print("Starting data pipeline loop...")
         t = 0
+        total_detection_time = 0.0
+        total_llm_time = 0.0
+        frame_count = 0
+
+        # thread pool for running LLM in parallel with detection
+        executor = ThreadPoolExecutor(max_workers=1)
+        pending_llm = None
+
         while True:
             # collect frames
             # push the first frame
@@ -141,8 +161,12 @@ class DataPipeline:
             # perform object detection
             # this returns a list of dictionaries with keys
             # "label", "score", "box", and "centroid"
+            detection_start = time.time()
             detected_obj = self.obj_detection_model.detect(frame)
+            total_detection_time += time.time() - detection_start
+
             self._append_frame(detected_obj)
+            frame_count += 1
 
             if visualize:
                 visualize_frame(frame, detected_obj)
@@ -152,23 +176,64 @@ class DataPipeline:
                 if not success:
                     break
 
+                detection_start = time.time()
                 detected_obj = self.obj_detection_model.detect(frame)
-                detected_obj = self._compute_motion(
-                    self.frames[-1], detected_obj)
+                total_detection_time += time.time() - detection_start
+
+                detected_obj = self._compute_motion(self.frames[-1], detected_obj)
                 self._append_frame(detected_obj)
+                frame_count += 1
+                total_time = total_detection_time
 
                 if visualize:
-                    visualize_frame(frame, detected_obj)
-                t += 1
+                    metrics = {
+                        "fps": frame_count / total_time if total_time > 0 else 0,
+                        "obj_count": len(detected_obj),
+                        "avg_det_ms": (total_detection_time / frame_count) * 1000,
+                        "avg_llm_ms": (total_llm_time / max(t, 1)) * 1000,
+                    }
 
-            # generate commentary
+                    visualize_frame(frame, detected_obj, metrics=metrics)
+
+            # initialize prompt generation
             prompt = self.prompt_constructor.generate_prompt(
                 self.frames,
-                t=t - len(self.frames)  # Pass the starting timestep of the window
+                t=t - len(self.frames)
             )
-            commentary = self.commentary_generator.generate(prompt)
-            # print("Commentary:", commentary)
-            self.llm_commentary.append((t, commentary))
+            if pending_llm is not None:
+                commentary, llm_elapsed = pending_llm.result()
+                total_llm_time += llm_elapsed
+                self.llm_commentary.append((t, commentary))
+            else:
+                # start inference
+                pending_llm = executor.submit(self._timed_llm_generate, prompt)
+
+            t += 1
+
+        #Printing Metrics
+            # print all metrics
+            # if frame_count > 0:
+            #     total_time = total_detection_time + total_llm_time
+            #     fps = frame_count / total_time if total_time > 0 else 0
+            #     avg_objects = sum(len(f) for f in self.frames) / max(len(self.frames), 1)
+            #     avg_confidence = sum(all_scores) / len(all_scores) if all_scores else 0
+            #     ram_used = psutil.Process().memory_info().rss / 1024 ** 2
+
+            #     print(f"\nPipeline Metrics")
+            #     print(f"Total frames processed:        {frame_count}")
+            #     print(f"Total pipeline time:           {total_time:.2f}s")
+            #     print(f"Pipeline FPS:                  {fps:.2f}")
+            #     print(f"Total detection time:          {total_detection_time:.2f}s")
+            #     print(f"Avg detection time per frame:  {total_detection_time / frame_count:.3f}s")
+            #     print(f"Total LLM time:                {total_llm_time:.2f}s")
+            #     print(f"Avg LLM time per window:       {total_llm_time / max(t, 1):.3f}s")
+            #     print(f"Avg objects detected per frame:{avg_objects:.1f}")
+            #     print(f"Avg detection confidence:      {avg_confidence:.2%}")
+            #     print(f"RAM used:                      {ram_used:.1f} MB")
+
+            #     if torch.cuda.is_available():
+            #         gpu_used = torch.cuda.memory_allocated() / 1024 ** 2
+            #         print(f"GPU memory used:               {gpu_used:.1f} MB")
 
         if visualize:
             cv2.destroyAllWindows()

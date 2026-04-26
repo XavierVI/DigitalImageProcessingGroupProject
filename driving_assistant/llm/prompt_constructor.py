@@ -48,19 +48,36 @@ class PromptConstructor:
     def _format_detections(self, objs: List[Dict]) -> tuple[int, str]:
         if len(objs) == 0:
             return 0, "Scene Status: No objects detected."
-        
-        labels = [o['label'] for o in objs]
-        
-        return len(labels), f"- Objects in view: {', '.join(labels)}."
+
+        lines = []
+        for o in objs:
+            centroid = o.get('centroid', None)
+            if centroid:
+                cx, cy = centroid
+                # Assume standard dashcam resolution ~480 height, ~640 width
+                position = "close ahead" if cy > 240 else "far ahead"
+                side = "left" if cx < 320 else "right"
+                lines.append(
+                    f"  - {o['label']} ({o['score']:.0%} conf) "
+                    f"— {position}, {side} side"
+                )
+            else:
+                lines.append(f"  - {o['label']} ({o['score']:.0%} conf)")
+
+        return len(lines), "Detected:\n" + "\n".join(lines)
 
     def _format_motion(self, objs: List[Dict], motion: List[Dict]) -> str:
-        output = "Kinematic Data:"
-        
-        for i, obj in enumerate(objs[:5]):  # Keep it concise for tokens
-            vel = motion[i].get('velocity', (0, 0)) if i < len(
-                motion) else (0, 0)
-        
-            output += f"\n- {obj['label']}: Box {obj['box']}, Velocity {vel}"
-        
-        return output
+        lines = ["Motion:"]
+
+        for obj in objs[:5]:
+            vx, vy = obj.get('velocity', (0, 0))
+            speed = (vx ** 2 + vy ** 2) ** 0.5
+            if speed > 5:  # only report meaningful motion
+                direction = "approaching" if vy > 0 else "moving away"
+                lines.append(
+                    f"  - {obj['label']} is {direction} "
+                    f"(speed ~{speed:.0f} px/frame)"
+                )
+
+        return "\n".join(lines) if len(lines) > 1 else ""
 

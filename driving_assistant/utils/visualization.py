@@ -7,7 +7,7 @@ from typing import List, Dict, Tuple
 from PIL import Image
 
 
-def visualize_frame(frame, detected_obj):
+def visualize_frame(frame, detected_obj, metrics=None):
     # Draw into a copy so we do not mutate the original frame.
     annotated = frame.copy()
 
@@ -44,6 +44,30 @@ def visualize_frame(frame, detected_obj):
             2,
             cv2.LINE_AA,
         )
+
+    # Overlay metrics panel
+    if metrics:
+        lines = [
+            f"FPS: {metrics.get('fps', 0):.1f}",
+            f"Objects: {metrics.get('obj_count', 0)}",
+            f"Det: {metrics.get('avg_det_ms', 0):.0f}ms",
+            f"LLM: {metrics.get('avg_llm_ms', 0):.0f}ms",
+        ]
+        pad = 6
+        x, y = 10, 10
+        line_h = 20
+        panel_h = len(lines) * line_h + pad * 2
+        panel_w = 180
+        overlay = annotated.copy()
+        cv2.rectangle(overlay, (x, y), (x + panel_w,
+                      y + panel_h), (0, 0, 0), -1)
+        cv2.addWeighted(overlay, 0.5, annotated, 0.5, 0, annotated)
+        for i, line in enumerate(lines):
+            cv2.putText(annotated, line, (x + pad, y + pad + (i + 1) * line_h - 4),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1, cv2.LINE_AA)
+
+    cv2.imshow("Alert System", annotated)
+    cv2.waitKey(1)
 
     # Fast real-time rendering for video playback.
     cv2.imshow("Alert System", annotated)

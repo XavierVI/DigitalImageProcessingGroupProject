@@ -140,6 +140,7 @@ def run_pipeline_over_dataset(
         pipeline.reset()
         llm_output = pipeline.loop(visualize=visualize)
         model_outputs[video_name] = extract_tags_from_commentary(llm_output)
+        print(f"{llm_output}")
         print(f"Processed {idx + 1}/{len(dataset)}: {video_name}")
 
     print("\nPipeline run complete.")

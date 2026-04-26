@@ -1,7 +1,11 @@
+import time
+
 import requests
 import yt_dlp
 import os
 import re
+
+import argparse
 
 
 def _safe_filename(name, max_length=120):
@@ -29,6 +33,7 @@ def scrape_without_api(subreddit, limit=10):
     os.makedirs("downloads", exist_ok=True)
     output_dir = "data/reddit_dashcam_videos"
     os.makedirs(output_dir, exist_ok=True)
+    index_offset = len(os.listdir(output_dir))
 
     ydl_opts = {
         'format': 'bestvideo+bestaudio/best',
@@ -40,7 +45,7 @@ def scrape_without_api(subreddit, limit=10):
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        for post in posts:
+        for i, post in enumerate(posts):
             post_data = post['data']
             # Filter for video posts
             if post_data.get('is_video') and post_data.get('media', {}).get('reddit_video'):
@@ -53,7 +58,8 @@ def scrape_without_api(subreddit, limit=10):
                     info = ydl.extract_info(video_url, download=True)
 
                     download_path = None
-                    requested = info.get('requested_downloads') if isinstance(info, dict) else None
+                    requested = info.get('requested_downloads') if isinstance(
+                        info, dict) else None
                     if requested and requested[0].get('filepath'):
                         download_path = requested[0]['filepath']
                     elif isinstance(info, dict) and info.get('_filename'):
@@ -67,11 +73,22 @@ def scrape_without_api(subreddit, limit=10):
                         )
 
                     ext = os.path.splitext(download_path)[1] or '.mp4'
-                    destination = os.path.join(output_dir, f"{safe_title}_{post_id}{ext}")
+                    # name the file "video_i"
+                    destination = os.path.join(output_dir, f"video_{i + index_offset}{ext}")
                     os.replace(download_path, destination)
                 except Exception as e:
                     print(f"Skipping {video_url}: {e}")
 
+            time.sleep(5)
+
 
 if __name__ == "__main__":
-    scrape_without_api("dashcams", limit=25)
+    parser = argparse.ArgumentParser(
+        description="Scrape Reddit videos without API")
+    parser.add_argument("--subreddit", type=str,
+                        default="dashcams", help="Subreddit to scrape")
+    parser.add_argument("--limit", type=int, default=25,
+                        help="Number of posts to scrape")
+    args = parser.parse_args()
+
+    scrape_without_api(args.subreddit, limit=args.limit)
