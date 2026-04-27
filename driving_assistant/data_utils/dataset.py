@@ -53,6 +53,12 @@ class VideoDataset(torch.utils.data.Dataset):
         """
         return self.files[idx]
 
+    def get_current_time(self) -> float:
+        """Returns current position in seconds."""
+        if self.curr_video is None:
+            return 0.0
+        return self.curr_video.get(cv2.CAP_PROP_POS_MSEC) / 1000.0
+
     def __len__(self):
         """
         Can we get the number of frames in the

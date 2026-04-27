@@ -68,7 +68,7 @@ def load_labels(labels_path: str) -> Dict[str, List[str]]:
 def extract_tags_from_commentary(llm_output: List[tuple[int, str]]) -> List[str]:
     """Convert generated commentary text into token-level tags."""
     tags: List[str] = []
-    for _, commentary in llm_output:
+    for _, _, commentary in llm_output:
         tags.extend(re.findall(r"[a-z0-9_'-]+", commentary.lower()))
     return tags
 
