@@ -92,6 +92,7 @@ def run_pipeline_over_dataset(
     obj_detection_model: str,
     llm_model_name: str,
     visualize: bool,
+    max_videos: int | None = None,
 ) -> None:
     """Initialize pipeline components and evaluate all videos in the dataset."""
     keywords = [
@@ -129,8 +130,9 @@ def run_pipeline_over_dataset(
     manual_labels = load_labels(labels_path)
     model_outputs: Dict[str, List[str]] = {}
 
-    print(f"Found {len(dataset)} videos. Running full pipeline...")
-    for idx in range(len(dataset)):
+    total_videos = len(dataset) if max_videos is None else min(len(dataset), max_videos)
+    print(f"Found {len(dataset)} videos. Running {total_videos} video(s)...")
+    for idx in range(total_videos):
         video_name = dataset.get_video_name(idx)
         is_opened, _ = dataset[idx]
         if not is_opened:
@@ -182,13 +184,19 @@ def main() -> None:
     )
     parser.add_argument(
         "--llm-model",
-        default="google/flan-t5-base",
+        default="google/flan-t5-small",
         help="Hugging Face model id for commentary generation.",
     )
     parser.add_argument(
         "--visualize",
         action="store_true",
         help="Show frame visualizations while running.",
+    )
+    parser.add_argument(
+        "--max-videos",
+        type=int,
+        default=None,
+        help="Limit how many videos to process. Omit to process all videos.",
     )
 
     args = parser.parse_args()
@@ -198,6 +206,7 @@ def main() -> None:
         obj_detection_model=args.object_model,
         llm_model_name=args.llm_model,
         visualize=args.visualize,
+        max_videos=args.max_videos,
     )
 
 

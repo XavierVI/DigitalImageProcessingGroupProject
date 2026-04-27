@@ -28,8 +28,8 @@ class CommentaryGenerator:
         self,
         hugging_face_model: str = "google/flan-t5-small",
         device=None,
-        max_new_tokens: int = 300,
-        num_beams: int = 5,
+        max_new_tokens: int = 160,
+        num_beams: int = 3,
         early_stopping: bool = True
     ):
         """Initialize the commentary generator.
@@ -150,7 +150,12 @@ class CommentaryGenerator:
         messages = [
             {
                 "role": "system",
-                "content": "You are an expert driving assistant. Analyze the detected objects from dashcam footage and warn the driver about any immediate risks. Be specific about what the object is, where it is, and what action to take."
+                "content": (
+                    "You are a driving assistant for dashcam footage. "
+                    "Answer in 1 to 3 short bullet points. "
+                    "Lead with the most important hazard, mention location, and tell the driver what to do next. "
+                    "If there is no immediate hazard, say so plainly."
+                )
             },
             {"role": "user", "content": prompt}
         ]
@@ -165,7 +170,9 @@ class CommentaryGenerator:
                 **inputs,
                 max_new_tokens=self.max_new_tokens,
                 do_sample=False,
-                pad_token_id=self.tokenizer.eos_token_id
+                pad_token_id=self.tokenizer.eos_token_id,
+                repetition_penalty=1.1,
+                no_repeat_ngram_size=3,
             )
         new_tokens = outputs[0][inputs["input_ids"].shape[1]:]
         full_response = self.tokenizer.decode(new_tokens, skip_special_tokens=True)

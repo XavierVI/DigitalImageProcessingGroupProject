@@ -7,11 +7,10 @@ import json
 class PromptConstructor:
     def __init__(self, keywords: List[str]):
         self.keywords = keywords
-        # Define a consistent system instruction
         self.base_instruction = (
-            f"You are a professional driving assistant. "
-            "Analyze the following data and provide concise, "
-            "safety-critical alerts."
+            "You are a driving assistant for dashcam footage. "
+            "Respond quickly, directly, and only with useful safety information. "
+            "Prioritize immediate hazards over background details."
         )
         self.base_instruction += (
             f"\nFocus on these keywords: {', '.join(self.keywords)}."
@@ -27,21 +26,29 @@ class PromptConstructor:
         Returns:
             A formatted string prompt for the LLM.
         """
-        sections = [self.base_instruction]
+        sections = [
+            self.base_instruction,
+            "Output format: 1 to 3 short bullet points.",
+            "If there is no immediate hazard, say 'No immediate hazard detected.'",
+            "Mention what is happening, where it is, and what the driver should do.",
+        ]
 
         for i, obj in enumerate(frames):
-            new_section = f"Timestep {t + i}: ```"
-            # extract relevant data for the current frame
-
+            new_section = [f"Timestep {t + i}:" ]
             num_objs, objs = self._format_detections(obj)
-            new_section += f"- number of objects: {num_objs}\n{objs}"
+            new_section.append(f"- number of objects: {num_objs}")
+            new_section.append(objs)
 
             if num_objs > 0:
-                new_section += "\n" + self._format_motion(obj, [])
+                motion = self._format_motion(obj, [])
+                if motion:
+                    new_section.append(motion)
 
-        # Add the 'Ask' at the end
+            sections.append("\n".join(new_section))
+
         sections.append(
-            "\nFINAL TASK: Provide a concise summary and any urgent hazard warnings.")
+            "FINAL TASK: Write the response now. Be specific, brief, and actionable."
+        )
 
         return "\n".join(sections)
 
