@@ -201,9 +201,12 @@ class DataPipeline:
                 t=t - len(self.frames)
             )
             if pending_llm is not None:
+                # commentary is a dictionary with keys "warning" (bool) and "message" (str)
                 commentary, llm_elapsed = pending_llm.result()
                 total_llm_time += llm_elapsed
-                self.llm_commentary.append((t, commentary))
+                
+                if commentary['warning']:
+                    self.llm_commentary.append((t, commentary["message"]))
             else:
                 # start inference
                 pending_llm = executor.submit(self._timed_llm_generate, prompt)

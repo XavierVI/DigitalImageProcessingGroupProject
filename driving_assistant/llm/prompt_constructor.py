@@ -41,7 +41,11 @@ class PromptConstructor:
 
         # Add the 'Ask' at the end
         sections.append(
-            "\nFINAL TASK: Provide a concise summary and any urgent hazard warnings.")
+            "\nFINAL TASK: Respond only with a JSON object. "
+            "If any object poses an immediate collision risk, return {\"warning\": true, \"message\": \"<specific hazard description>\"}. "
+            "If the scene is safe, return {\"warning\": false}. "
+            "No explanation, no markdown, only the JSON object."
+        )
 
         return "\n".join(sections)
 
