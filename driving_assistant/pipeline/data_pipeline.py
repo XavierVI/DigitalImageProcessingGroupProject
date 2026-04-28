@@ -58,6 +58,7 @@ class DataPipeline:
         # this saves the LLM output for each timestep.
         # format of each entry is (timestep, commentary)
         self.llm_commentary = []
+        self.last_runtime_metrics = {}
 
     def _append_frame(self, frame):
         # maintain the sliding window
@@ -69,6 +70,7 @@ class DataPipeline:
     def reset(self):
         self.frames = []
         self.llm_commentary = []
+        self.last_runtime_metrics = {}
 
     def _compute_motion(self, F_prev, F):
         """
@@ -143,10 +145,12 @@ class DataPipeline:
             over time.
         """
         print("Starting data pipeline loop...")
+        loop_start = time.perf_counter()
         t = 0
         total_detection_time = 0.0
         total_llm_time = 0.0
         frame_count = 0
+        llm_jobs = 0
 
         # thread pool for running LLM in parallel with detection
         executor = ThreadPoolExecutor(max_workers=1)
@@ -204,9 +208,12 @@ class DataPipeline:
                 commentary, llm_elapsed = pending_llm.result()
                 total_llm_time += llm_elapsed
                 self.llm_commentary.append((t, commentary))
-            else:
-                # start inference
-                pending_llm = executor.submit(self._timed_llm_generate, prompt)
+                pending_llm = None
+                llm_jobs += 1
+
+            # start inference for the current window so the next loop iteration
+            # can collect the previous result while this one is running.
+            pending_llm = executor.submit(self._timed_llm_generate, prompt)
 
             t += 1
 
@@ -234,6 +241,26 @@ class DataPipeline:
             #     if torch.cuda.is_available():
             #         gpu_used = torch.cuda.memory_allocated() / 1024 ** 2
             #         print(f"GPU memory used:               {gpu_used:.1f} MB")
+
+        if pending_llm is not None:
+            commentary, llm_elapsed = pending_llm.result()
+            total_llm_time += llm_elapsed
+            self.llm_commentary.append((t, commentary))
+            llm_jobs += 1
+
+        wall_time = time.perf_counter() - loop_start
+        self.last_runtime_metrics = {
+            "frames_processed": frame_count,
+            "llm_jobs": llm_jobs,
+            "detection_time_s": total_detection_time,
+            "llm_time_s": total_llm_time,
+            "wall_time_s": wall_time,
+            "fps": frame_count / wall_time if wall_time > 0 else 0.0,
+            "avg_detection_ms": (total_detection_time / frame_count) * 1000 if frame_count > 0 else 0.0,
+            "avg_llm_ms": (total_llm_time / llm_jobs) * 1000 if llm_jobs > 0 else 0.0,
+        }
+
+        executor.shutdown(wait=True)
 
         if visualize:
             cv2.destroyAllWindows()

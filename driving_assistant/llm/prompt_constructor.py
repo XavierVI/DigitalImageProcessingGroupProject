@@ -31,6 +31,8 @@ class PromptConstructor:
             "Output format: 1 to 3 short bullet points.",
             "If there is no immediate hazard, say 'No immediate hazard detected.'",
             "Mention what is happening, where it is, and what the driver should do.",
+            "Do not copy raw detection text, confidence percentages, or timestep lines.",
+            "Do not output phrases like 'number of objects', 'Detected', or 'Timestep'.",
         ]
 
         for i, obj in enumerate(frames):

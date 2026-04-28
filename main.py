@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import re
+import time
 from typing import Dict, List
 
 import torch
@@ -21,7 +22,7 @@ def calculate_metrics(manual_labels: Dict[str, List[str]], model_outputs: Dict[s
     model_outputs: dict { "vid_1": ["red_light", "intersection"] }
 
     The outputs can just be the words split up by spaces.
-    """
+    ""
     results = {}
 
     for vid, gt_tags in manual_labels.items():
@@ -51,6 +52,94 @@ def calculate_metrics(manual_labels: Dict[str, List[str]], model_outputs: Dict[s
     return results
 
 
+def _normalize_tag(tag: str) -> str:
+    normalized = re.sub(r"[^a-z0-9]+", " ", str(tag).lower()).strip()
+    normalized = re.sub(r"\s+", " ", normalized)
+
+    replacements = {
+        "braking": "breaking",
+        "cutting off": "cut off",
+        "changing lane": "changing lanes",
+        "change lane": "change lanes",
+        "slowing down": "slow down",
+    }
+
+    return replacements.get(normalized, normalized)
+
+
+def build_label_vocabulary(manual_labels: Dict[str, List[str]]) -> set[str]:
+    vocabulary: set[str] = set()
+    for tags in manual_labels.values():
+        for tag in tags:
+            normalized = _normalize_tag(tag)
+            if normalized:
+                vocabulary.add(normalized)
+    return vocabulary
+
+
+def _normalize_commentary_text(commentary: str) -> str:
+    normalized = re.sub(r"[^a-z0-9]+", " ", commentary.lower())
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+
+    replacements = {
+        "braking": "breaking",
+        "cutting off": "cut off",
+        "changing lane": "changing lanes",
+        "change lane": "change lanes",
+        "slowing down": "slow down",
+    }
+
+    for source, target in replacements.items():
+        normalized = normalized.replace(source, target)
+
+    return normalized
+
+
+def _normalize_token(token: str, vocabulary: set[str]) -> str:
+    if token in vocabulary:
+        return token
+    if token.endswith("ies") and len(token) > 3:
+        candidate = token[:-3] + "y"
+        if candidate in vocabulary:
+            return candidate
+    if token.endswith("es") and len(token) > 4:
+        candidate = token[:-2]
+        if candidate in vocabulary:
+            return candidate
+    if token.endswith("s") and len(token) > 3:
+        candidate = token[:-1]
+        if candidate in vocabulary:
+            return candidate
+    return token
+
+
+def extract_tags_from_commentary(llm_output: List[tuple[int, str]], vocabulary: set[str]) -> List[str]:
+    """Extract normalized alert tags from generated commentary text."""
+    tags: List[str] = []
+    seen: set[str] = set()
+    text = _normalize_commentary_text(" ".join(commentary for _, commentary in llm_output))
+
+    phrase_tags = [tag for tag in vocabulary if " " in tag]
+    phrase_tags.sort(key=lambda tag: (-len(tag.split()), -len(tag)))
+
+    for phrase in phrase_tags:
+        if re.search(rf"(?<!\\w){re.escape(phrase)}(?!\\w)", text) and phrase not in seen:
+            tags.append(phrase)
+            seen.add(phrase)
+
+    token_tags = {
+        _normalize_token(token, vocabulary)
+        for token in re.findall(r"[a-z0-9_'-]+", text)
+    }
+
+    for token in sorted(token_tags):
+        if token in vocabulary and token not in seen:
+            tags.append(token)
+            seen.add(token)
+
+    return tags
+
+
 def load_labels(labels_path: str) -> Dict[str, List[str]]:
     """Load manual labels from JSON if the file exists."""
     if not os.path.exists(labels_path):
@@ -65,14 +154,6 @@ def load_labels(labels_path: str) -> Dict[str, List[str]]:
     return normalized
 
 
-def extract_tags_from_commentary(llm_output: List[tuple[int, str]]) -> List[str]:
-    """Convert generated commentary text into token-level tags."""
-    tags: List[str] = []
-    for _, commentary in llm_output:
-        tags.extend(re.findall(r"[a-z0-9_'-]+", commentary.lower()))
-    return tags
-
-
 def summarize_metrics(per_video_metrics: Dict[str, Dict[str, float]]) -> Dict[str, float]:
     """Compute dataset-level averages for jaccard, precision, and recall."""
     if not per_video_metrics:
@@ -83,6 +164,24 @@ def summarize_metrics(per_video_metrics: Dict[str, Dict[str, float]]) -> Dict[st
         "jaccard": round(sum(m["jaccard"] for m in per_video_metrics.values()) / count, 3),
         "precision": round(sum(m["precision"] for m in per_video_metrics.values()) / count, 3),
         "recall": round(sum(m["recall"] for m in per_video_metrics.values()) / count, 3),
+    }
+
+
+def summarize_runtime_metrics(per_video_metrics: Dict[str, Dict[str, float]]) -> Dict[str, float]:
+    if not per_video_metrics:
+        return {
+            "fps": 0.0,
+            "wall_time_s": 0.0,
+            "avg_detection_ms": 0.0,
+            "avg_llm_ms": 0.0,
+        }
+
+    count = len(per_video_metrics)
+    return {
+        "fps": round(sum(m.get("fps", 0.0) for m in per_video_metrics.values()) / count, 3),
+        "wall_time_s": round(sum(m.get("wall_time_s", 0.0) for m in per_video_metrics.values()) / count, 3),
+        "avg_detection_ms": round(sum(m.get("avg_detection_ms", 0.0) for m in per_video_metrics.values()) / count, 3),
+        "avg_llm_ms": round(sum(m.get("avg_llm_ms", 0.0) for m in per_video_metrics.values()) / count, 3),
     }
 
 
@@ -128,7 +227,9 @@ def run_pipeline_over_dataset(
     )
 
     manual_labels = load_labels(labels_path)
+    label_vocabulary = build_label_vocabulary(manual_labels)
     model_outputs: Dict[str, List[str]] = {}
+    runtime_metrics: Dict[str, Dict[str, float]] = {}
 
     total_videos = len(dataset) if max_videos is None else min(len(dataset), max_videos)
     print(f"Found {len(dataset)} videos. Running {total_videos} video(s)...")
@@ -139,13 +240,25 @@ def run_pipeline_over_dataset(
             print(f"Skipping {video_name}: failed to open video.")
             continue
 
+        video_start = time.perf_counter()
         pipeline.reset()
         llm_output = pipeline.loop(visualize=visualize)
-        model_outputs[video_name] = extract_tags_from_commentary(llm_output)
+        model_outputs[video_name] = extract_tags_from_commentary(llm_output, label_vocabulary)
+        runtime_metrics[video_name] = {
+            **pipeline.last_runtime_metrics,
+            "wall_time_s": round(time.perf_counter() - video_start, 3),
+        }
         print(f"{llm_output}")
         print(f"Processed {idx + 1}/{len(dataset)}: {video_name}")
 
     print("\nPipeline run complete.")
+
+    runtime_summary = summarize_runtime_metrics(runtime_metrics)
+    print("\nRuntime benchmark:")
+    for video_name, metrics in runtime_metrics.items():
+        print(f"- {video_name}: {metrics}")
+    print("\nBenchmark averages:")
+    print(runtime_summary)
 
     if not manual_labels:
         print(f"No labels found at {labels_path}. Skipping metric computation.")
@@ -174,7 +287,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--labels-path",
-        default="labels.json",
+        default=os.path.join("data", "reddit_dashcam_videos", "labels.json"),
         help="Path to manual labels JSON generated by annotator.py.",
     )
     parser.add_argument(
@@ -198,6 +311,12 @@ def main() -> None:
         default=None,
         help="Limit how many videos to process. Omit to process all videos.",
     )
+    parser.add_argument(
+        "--max-video",
+        type=int,
+        default=None,
+        help="Alias for --max-videos.",
+    )
 
     args = parser.parse_args()
     run_pipeline_over_dataset(
@@ -206,7 +325,7 @@ def main() -> None:
         obj_detection_model=args.object_model,
         llm_model_name=args.llm_model,
         visualize=args.visualize,
-        max_videos=args.max_videos,
+        max_videos=args.max_videos if args.max_videos is not None else args.max_video,
     )
 
 
