@@ -1,8 +1,11 @@
-"""Object detection using DETR model."""
+"""Object detection using DETR, RT-DETR, or YOLO models."""
 
+import os
+from typing import List, Dict, Optional
+
+import numpy as np
 import torch
 from PIL import Image
-from typing import List, Dict, Optional
 
 from transformers import (
     DetrImageProcessor,
@@ -11,10 +14,14 @@ from transformers import (
     RTDetrForObjectDetection,
 )
 
-import os
+
+try:
+    from ultralytics import YOLO
+except ImportError:  # pragma: no cover - optional dependency for YOLO mode
+    YOLO = None
 
 class ObjectDetector:
-    """Performs object detection on images using pre-trained DETR model.
+    """Performs object detection on images using pre-trained DETR or YOLO models.
 
     Args:
         processor: Processor for preparing images for the model
@@ -30,7 +37,8 @@ class ObjectDetector:
                 (e.g., "facebook/detr-resnet-50" or "PekingU/rtdetr_r50vd" or "yolo")
             device: torch.device to use for inference
         """
-        self.device = device
+        self.device = device or torch.device("cpu")
+        self.model_name = obj_detection_model
         # loading models
         # Load Object Detection Model (DETR)
         model = "PekingU/rtdetr_r50vd"
@@ -44,7 +52,7 @@ class ObjectDetector:
             self.obj_det_model = DetrForObjectDetection.from_pretrained(
                 model,
                 cache_dir=os.path.join(os.getcwd(), "models")
-            ).to(device)
+            ).to(self.device)
             self.detection_func = self._detr_detection
 
         elif obj_detection_model == "PekingU/rtdetr_r50vd":
@@ -55,15 +63,26 @@ class ObjectDetector:
             self.obj_det_model = RTDetrForObjectDetection.from_pretrained(
                 model,
                 cache_dir=os.path.join(os.getcwd(), "models")
-            ).to(device)
+            ).to(self.device)
             print(f"Loaded {model} successfully.")
             self.detection_func = self._detr_detection
             print(f"Set object detection function to {self.detection_func}.")
 
         elif obj_detection_model == "yolo":
-            # Initialize YOLO model (example, replace with actual YOLO initialization)
-            pass
+            if YOLO is None:
+                raise ImportError(
+                    "YOLO inference requires the 'ultralytics' package. "
+                    "Install it with 'pip install ultralytics'."
+                )
+
+            self.obj_det_model = YOLO("yolov8n.pt")
+            self.obj_det_model.to(self.device)
             self.detection_func = self._yolo_detection
+
+        else:
+            raise ValueError(
+                f"Unsupported object detection model: {obj_detection_model}"
+            )
 
         # set to evaluation mode for faster inference
         self.obj_det_model.eval()
@@ -83,9 +102,42 @@ class ObjectDetector:
 
 
     def _yolo_detection(self, frame, threshold: float = 0.9) -> List[Dict]:
-        # Placeholder for YOLO detection logic
-        # Implement YOLO detection and return results in the same format as DETR
-        pass
+        if isinstance(frame, Image.Image):
+            frame = np.array(frame)
+
+        results = self.obj_det_model.predict(
+            source=frame,
+            conf=threshold,
+            device=str(self.device),
+            verbose=False,
+        )
+
+        if not results:
+            return []
+
+        prediction = results[0]
+        boxes = prediction.boxes
+        if boxes is None or len(boxes) == 0:
+            return []
+
+        xyxy = boxes.xyxy.detach().cpu()
+        scores = boxes.conf.detach().cpu()
+        class_ids = boxes.cls.detach().cpu().long()
+        centroids = (xyxy[:, :2] + xyxy[:, 2:]) / 2.0
+
+        names = prediction.names or getattr(self.obj_det_model, "names", {})
+
+        return [
+            {
+                "label": names.get(int(class_id), str(int(class_id)))
+                if isinstance(names, dict)
+                else names[int(class_id)],
+                "score": round(float(score), 3),
+                "box": torch.round(box, decimals=2).tolist(),
+                "centroid": torch.round(centroid, decimals=2).tolist(),
+            }
+            for box, score, class_id, centroid in zip(xyxy, scores, class_ids, centroids)
+        ]
 
 
     def _detr_detection(self, frame, threshold: float = 0.9) -> List[Dict]:
