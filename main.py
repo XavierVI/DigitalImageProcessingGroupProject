@@ -22,7 +22,7 @@ def calculate_metrics(manual_labels: Dict[str, List[str]], model_outputs: Dict[s
     model_outputs: dict { "vid_1": ["red_light", "intersection"] }
 
     The outputs can just be the words split up by spaces.
-    ""
+    """
     results = {}
 
     for vid, gt_tags in manual_labels.items():
@@ -189,6 +189,7 @@ def run_pipeline_over_dataset(
     video_dir: str,
     labels_path: str,
     obj_detection_model: str,
+    yolo_weights_path: str | None,
     llm_model_name: str,
     visualize: bool,
     max_videos: int | None = None,
@@ -213,7 +214,11 @@ def run_pipeline_over_dataset(
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    detector = ObjectDetector(obj_detection_model, device=device)
+    detector = ObjectDetector(
+        obj_detection_model,
+        device=device,
+        yolo_weights_path=yolo_weights_path,
+    )
     prompt_constructor = PromptConstructor(keywords)
     commentary_generator = CommentaryGenerator(llm_model_name, device=device)
 
@@ -296,6 +301,11 @@ def main() -> None:
         help="Hugging Face model id for object detection.",
     )
     parser.add_argument(
+        "--yolo-weights",
+        default=None,
+        help="Path to custom YOLO weights (.pt) to use when --object-model yolo.",
+    )
+    parser.add_argument(
         "--llm-model",
         default="google/flan-t5-small",
         help="Hugging Face model id for commentary generation.",
@@ -323,6 +333,7 @@ def main() -> None:
         video_dir=args.video_dir,
         labels_path=args.labels_path,
         obj_detection_model=args.object_model,
+        yolo_weights_path=args.yolo_weights,
         llm_model_name=args.llm_model,
         visualize=args.visualize,
         max_videos=args.max_videos if args.max_videos is not None else args.max_video,

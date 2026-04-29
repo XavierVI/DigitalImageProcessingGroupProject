@@ -29,7 +29,7 @@ class ObjectDetector:
         device: Device to run inference on (cuda or cpu)
     """
 
-    def __init__(self, obj_detection_model, device=None):
+    def __init__(self, obj_detection_model, device=None, yolo_weights_path: Optional[str] = None):
         """Initialize the object detector.
 
         Args:
@@ -75,8 +75,12 @@ class ObjectDetector:
                     "Install it with 'pip install ultralytics'."
                 )
 
-            self.obj_det_model = YOLO("yolov8n.pt")
+            weights_path = yolo_weights_path or "yolov8n.pt"
+            self.yolo_weights_path = weights_path
+            self.obj_det_model = YOLO(weights_path)
             self.obj_det_model.to(self.device)
+            self.yolo_inference_device = str(self.device)
+            self.yolo_fallback_device = "cpu"
             self.detection_func = self._yolo_detection
 
         else:
@@ -105,12 +109,32 @@ class ObjectDetector:
         if isinstance(frame, Image.Image):
             frame = np.array(frame)
 
-        results = self.obj_det_model.predict(
-            source=frame,
-            conf=threshold,
-            device=str(self.device),
-            verbose=False,
-        )
+        try:
+            results = self.obj_det_model.predict(
+                source=frame,
+                conf=threshold,
+                device=self.yolo_inference_device,
+                verbose=False,
+            )
+        except (NotImplementedError, RuntimeError) as exc:
+            message = str(exc)
+            if "torchvision::nms" not in message and "CUDA" not in message:
+                raise
+
+            if self.yolo_inference_device != self.yolo_fallback_device:
+                print(
+                    "Warning: YOLO CUDA inference is unavailable in this environment; "
+                    "falling back to CPU."
+                )
+                self.yolo_inference_device = self.yolo_fallback_device
+
+            self.obj_det_model.to(self.yolo_fallback_device)
+            results = self.obj_det_model.predict(
+                source=frame,
+                conf=threshold,
+                device=self.yolo_fallback_device,
+                verbose=False,
+            )
 
         if not results:
             return []
