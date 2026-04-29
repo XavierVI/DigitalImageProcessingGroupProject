@@ -18,6 +18,7 @@ from driving_assistant.utils.visualization import visualize_frame, Visualizer
 from concurrent.futures import ThreadPoolExecutor
 import time
 import psutil
+import os
 
 class DataPipeline:
     """
@@ -59,6 +60,15 @@ class DataPipeline:
         # format of each entry is (timestep, commentary)
         self.llm_commentary = []
 
+        # avg. metrics
+        self.avg_detection_time = 0.0
+        self.avg_llm_time = 0.0
+        self.avg_fps = 0.0
+        # tail performance
+        self.max_detection_time = 0.0
+        self.max_llm_time = 0.0
+        self.min_fps = float('inf')
+
     def _append_frame(self, frame):
         # maintain the sliding window
         if len(self.frames) > self.window_size:
@@ -69,6 +79,22 @@ class DataPipeline:
     def reset(self):
         self.frames = []
         self.llm_commentary = []
+        self.avg_detection_time = 0.0
+        self.avg_llm_time = 0.0
+        self.avg_fps = 0.0
+        self.max_detection_time = 0.0
+        self.max_llm_time = 0.0
+        self.min_fps = float('inf')
+
+    def get_metrics(self):
+        return {
+            "avg_fps": self.avg_fps,
+            "avg_detection_time_ms": self.avg_detection_time,
+            "avg_llm_time_ms": self.avg_llm_time,
+            "max_detection_time_ms": self.max_detection_time,
+            "max_llm_time_ms": self.max_llm_time,
+            "min_fps": self.min_fps,
+        }
 
     def _compute_motion(self, F_prev, F):
         """
@@ -132,7 +158,7 @@ class DataPipeline:
         return commentary, end_time - start_time
 
 
-    def loop(self, visualize=False) -> List[Tuple[int, str]]:
+    def loop(self, visualize=False) -> List[Tuple[int, int, str]]:
         """
         A loop that runs the pipeline
         indefinitely (or until the data stream ends).
@@ -155,7 +181,8 @@ class DataPipeline:
         if visualize:
             h, w = self.datastream.get_height_width()
             visualizer = Visualizer(
-                f'out/{self.datastream.get_current_video_name()}',
+                os.path.join(
+                    "eval_videos", f"{self.datastream.get_current_video_name()}"),
                 height=h, width=w
             )
 
@@ -203,6 +230,12 @@ class DataPipeline:
                         "avg_det_ms": (total_detection_time / frame_count) * 1000,
                         "avg_llm_ms": (total_llm_time / max(t, 1)) * 1000,
                     }
+                    self.avg_fps += metrics["fps"]
+                    self.avg_detection_time += metrics["avg_det_ms"]
+                    self.avg_llm_time += metrics["avg_llm_ms"]
+                    self.max_detection_time = max(self.max_detection_time, metrics["avg_det_ms"])
+                    self.max_llm_time = max(self.max_llm_time, metrics["avg_llm_ms"])
+                    self.min_fps = min(self.min_fps, metrics["fps"])
 
                     visualizer.update(
                         frame, detected_obj,
@@ -257,5 +290,9 @@ class DataPipeline:
         if visualize:
             visualizer.release()
             # cv2.destroyAllWindows()
+
+        self.avg_fps /= t
+        self.avg_detection_time /= t
+        self.avg_llm_time /= t
 
         return self.llm_commentary

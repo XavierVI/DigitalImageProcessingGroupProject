@@ -9,7 +9,7 @@ from PIL import Image
 
 
 class Visualizer:
-    def __init__(self, output_path, codec='MP4V', fps=60, height=720, width=1280):
+    def __init__(self, output_path, codec='mp4v', fps=30, height=720, width=1280):
         self.output_path = output_path
         self.codec = codec
         self.fps = fps
