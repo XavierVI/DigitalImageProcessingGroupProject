@@ -12,7 +12,7 @@ from driving_assistant.object_detection.object_detector import ObjectDetector
 from driving_assistant.llm.prompt_constructor import PromptConstructor
 from driving_assistant.llm.commentary_generator import CommentaryGenerator
 
-from driving_assistant.utils.visualization import visualize_frame
+from driving_assistant.utils.visualization import visualize_frame, Visualizer
 
 # for running the LLM in parallel
 from concurrent.futures import ThreadPoolExecutor
@@ -152,6 +152,17 @@ class DataPipeline:
         executor = ThreadPoolExecutor(max_workers=1)
         pending_llm = None
 
+        if visualize:
+            h, w = self.datastream.get_height_width()
+            visualizer = Visualizer(f'out/{self.datastream.get_current_video_name()}.mp4', height=h, width=w)
+
+        metrics = {
+            "fps": 0.0,
+            "obj_count": 0,
+            "avg_det_ms": 0.0,
+            "avg_llm_ms": 0.0,
+        }
+
         while True:
             # collect frames
             # push the first frame
@@ -167,9 +178,6 @@ class DataPipeline:
 
             self._append_frame(detected_obj)
             frame_count += 1
-
-            if visualize:
-                visualize_frame(frame, detected_obj)
 
             for i in range(self.window_size):
                 success, frame = self.datastream.step()
@@ -193,7 +201,11 @@ class DataPipeline:
                         "avg_llm_ms": (total_llm_time / max(t, 1)) * 1000,
                     }
 
-                    visualize_frame(frame, detected_obj, metrics=metrics)
+                    visualizer.update(
+                        frame, detected_obj,
+                        metrics=metrics,
+                        commentary=self.llm_commentary[-1][2] if len(self.llm_commentary) > 0 else None
+                    )
 
             # initialize prompt generation
             prompt = self.prompt_constructor.generate_prompt(
@@ -240,6 +252,7 @@ class DataPipeline:
             #         print(f"GPU memory used:               {gpu_used:.1f} MB")
 
         if visualize:
-            cv2.destroyAllWindows()
+            visualizer.release()
+            # cv2.destroyAllWindows()
 
         return self.llm_commentary
