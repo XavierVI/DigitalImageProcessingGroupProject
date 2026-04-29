@@ -154,7 +154,10 @@ class DataPipeline:
 
         if visualize:
             h, w = self.datastream.get_height_width()
-            visualizer = Visualizer(f'out/{self.datastream.get_current_video_name()}.mp4', height=h, width=w)
+            visualizer = Visualizer(
+                f'out/{self.datastream.get_current_video_name()}',
+                height=h, width=w
+            )
 
         metrics = {
             "fps": 0.0,

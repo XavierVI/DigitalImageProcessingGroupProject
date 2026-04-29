@@ -9,14 +9,21 @@ from PIL import Image
 
 
 class Visualizer:
-    def __init__(self, output_path, codec='mp4v', fps=30, height=720, width=1280):
+    def __init__(self, output_path, codec='MP4V', fps=60, height=720, width=1280):
         self.output_path = output_path
         self.codec = codec
         self.fps = fps
-        self.init_writer(height, width, output_path)
+        # Writer will be initialized lazily on first frame so we can infer
+        # the true frame size from the incoming frames. Store intended
+        # defaults in case no frame is provided.
+        self._init_height = height
+        self._init_width = width
+        self.writer = None
 
     def release(self):
-        self.writer.release()
+        if self.writer is not None:
+            self.writer.release()
+            self.writer = None
 
     def init_writer(self, height, width, output_path):
         # Writer Initialization
@@ -25,10 +32,31 @@ class Visualizer:
         fourcc = cv2.VideoWriter_fourcc(*self.codec)
         self.writer = cv2.VideoWriter(
             output_path, fourcc, self.fps, (width, height))
+        if not getattr(self.writer, 'isOpened', lambda: True)():
+            # Some OpenCV builds expose isOpened as a method on VideoWriter,
+            # protect against older versions and signal failure early.
+            raise RuntimeError(f"Failed to open VideoWriter for {output_path} using codec {self.codec}")
 
     def update(self, frame, detected_obj, metrics=None, commentary=None):
         """Processes the frame and writes it to the file."""
         annotated = self._draw_overlay(frame, detected_obj, metrics, commentary)
+
+        # Lazily initialize writer with real frame size if needed
+        if self.writer is None:
+            h, w = annotated.shape[:2]
+            try:
+                self.init_writer(h, w, self.output_path)
+            except Exception:
+                # re-raise with more context
+                raise
+
+        # Ensure frame is uint8 and BGR
+        if annotated.dtype != 'uint8':
+            annotated = (np.clip(annotated, 0, 255)).astype('uint8')
+
+        if self.writer is None:
+            raise RuntimeError("VideoWriter not initialized")
+
         self.writer.write(annotated)
 
     def _draw_overlay(self, frame, detected_obj, metrics=None, commentary=None):
