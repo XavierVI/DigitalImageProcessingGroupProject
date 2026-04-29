@@ -230,9 +230,7 @@ class DataPipeline:
                         "avg_det_ms": (total_detection_time / frame_count) * 1000,
                         "avg_llm_ms": (total_llm_time / max(t, 1)) * 1000,
                     }
-                    self.avg_fps += metrics["fps"]
-                    self.avg_detection_time += metrics["avg_det_ms"]
-                    self.avg_llm_time += metrics["avg_llm_ms"]
+                    # Track min/max for tail performance
                     self.max_detection_time = max(self.max_detection_time, metrics["avg_det_ms"])
                     self.max_llm_time = max(self.max_llm_time, metrics["avg_llm_ms"])
                     self.min_fps = min(self.min_fps, metrics["fps"])
@@ -291,8 +289,11 @@ class DataPipeline:
             visualizer.release()
             # cv2.destroyAllWindows()
 
-        self.avg_fps /= t
-        self.avg_detection_time /= t
-        self.avg_llm_time /= t
+        # Calculate final metrics based on totals
+        if frame_count > 0:
+            total_pipeline_time = total_detection_time + total_llm_time
+            self.avg_fps = frame_count / total_pipeline_time if total_pipeline_time > 0 else 0
+            self.avg_detection_time = (total_detection_time / frame_count) * 1000  # in ms
+            self.avg_llm_time = (total_llm_time / max(t, 1)) * 1000  # in ms
 
         return self.llm_commentary
