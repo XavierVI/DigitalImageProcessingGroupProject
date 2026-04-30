@@ -6,9 +6,14 @@ platforms = ["linux-64", "win-64"]
 version = "0.1.0"
 
 [tasks]
-exp = "python main.py --visualize --llm-model=Qwen/Qwen2.5-1.5B-Instruct --object-model=PekingU/rtdetr_r50vd"
+exp = "python main.py --visualize --llm-model=Qwen/Qwen2.5-1.5B-Instruct --object-model=PekingU/rtdetr_r50vd --output-dir=eval_videos"
+
+yolo_exp = "python main.py --video-dir=data/traffic_light_detection --visualize --llm-model=Qwen/Qwen2.5-1.5B-Instruct --object-model=yolo --output-dir=traffic_light_eval"
+
 
 test = "python main.py --visualize --llm-model=Qwen/Qwen2.5-1.5B-Instruct --object-model=PekingU/rtdetr_r50vd --max-videos=1"
+
+yolo_test = "python main.py --video-dir=data/traffic_light_detection --visualize --llm-model=Qwen/Qwen2.5-1.5B-Instruct --object-model=yolo --max-videos=1 --output-dir=traffic_light_eval"
 
 
 [dependencies]

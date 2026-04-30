@@ -89,8 +89,10 @@ def load_labels(labels_path: str):
 
 def run_pipeline_over_dataset(
     video_dir: str,
+    output_dir: str,
     labels_path: str,
     obj_detection_model: str,
+    yolo_weights_path: str,
     llm_model_name: str,
     visualize: bool,
     max_videos: int = None,
@@ -115,7 +117,7 @@ def run_pipeline_over_dataset(
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    detector = ObjectDetector(obj_detection_model, device=device)
+    detector = ObjectDetector(obj_detection_model, device=device, yolo_weights_path=yolo_weights_path)
     prompt_constructor = PromptConstructor(keywords)
     commentary_generator = CommentaryGenerator(llm_model_name, device=device)
 
@@ -148,7 +150,7 @@ def run_pipeline_over_dataset(
             continue
 
         pipeline.reset()
-        llm_output = pipeline.loop(visualize=visualize)
+        llm_output = pipeline.loop(visualize=visualize, output_dir=output_dir)
         model_outputs[video_name] = llm_output
         perf_metrics[video_name] = pipeline.get_metrics()
         print(f"Processed {idx + 1}/{max_videos}: {video_name}")
@@ -160,7 +162,7 @@ def run_pipeline_over_dataset(
         return
 
     results = calculate_metrics(manual_labels, model_outputs)
-    save_perf_metrics(perf_metrics, os.path.join("eval_videos", "performance_metrics.json"))
+    save_perf_metrics(perf_metrics, os.path.join(output_dir, "performance_metrics.json"))
     print("\nEvaluation Metrics:")
     print(f"True Positives: {results['TP']}")
     print(f"True Negatives: {results['TN']}")
@@ -182,6 +184,11 @@ def main() -> None:
         help="Directory containing input videos.",
     )
     parser.add_argument(
+        "--output-dir",
+        default=os.path.join("eval_videos"),
+        help="Directory to save output videos and metrics.",
+    )
+    parser.add_argument(
         "--max-videos",
         default=None,
         type=int,
@@ -198,6 +205,11 @@ def main() -> None:
         help="Hugging Face model id for object detection.",
     )
     parser.add_argument(
+        "--yolo-weights-path",
+        default=os.path.join("models", "fine_tuned_yolo_weights", "best.pt"),
+        help="Path to YOLO weights file (if using YOLO).",
+    )
+    parser.add_argument(
         "--llm-model",
         default="google/flan-t5-small",
         help="Hugging Face model id for commentary generation.",
@@ -208,14 +220,17 @@ def main() -> None:
         help="Show frame visualizations while running.",
     )
 
-    # make directory for output videos if it doesn't exist
-    os.makedirs("eval_videos", exist_ok=True)
-
     args = parser.parse_args()
+
+    # make directory for output videos if it doesn't exist
+    os.makedirs(args.output_dir, exist_ok=True)
+    
     run_pipeline_over_dataset(
         video_dir=args.video_dir,
+        output_dir=args.output_dir,
         labels_path=args.labels_path,
         obj_detection_model=args.object_model,
+        yolo_weights_path=args.yolo_weights_path,
         llm_model_name=args.llm_model,
         visualize=args.visualize,
         max_videos=args.max_videos,

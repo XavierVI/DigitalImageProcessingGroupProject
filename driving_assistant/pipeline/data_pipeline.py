@@ -158,7 +158,7 @@ class DataPipeline:
         return commentary, end_time - start_time
 
 
-    def loop(self, visualize=False) -> List[Tuple[int, int, str]]:
+    def loop(self, visualize=False, output_dir: str = "eval_videos") -> List[Tuple[int, int, str]]:
         """
         A loop that runs the pipeline
         indefinitely (or until the data stream ends).
@@ -182,7 +182,7 @@ class DataPipeline:
             h, w = self.datastream.get_height_width()
             visualizer = Visualizer(
                 os.path.join(
-                    "eval_videos", f"{self.datastream.get_current_video_name()}"),
+                    output_dir, f"{self.datastream.get_current_video_name()}"),
                 height=h, width=w
             )
 
