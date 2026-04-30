@@ -15,106 +15,110 @@ from driving_assistant.object_detection.object_detector import ObjectDetector
 from driving_assistant.pipeline.data_pipeline import DataPipeline
 
 
-def calculate_metrics(manual_labels: Dict[str, List[str]], model_outputs: Dict[str, List[str]]) -> Dict[str, Dict[str, float]]:
+def calculate_metrics(
+    manual_labels: Dict[List[int, int], str],
+    model_outputs: Dict[str, List[int, int, str]]) -> List[int, int, int, int]:
     """
-    manual_labels: dict { "vid_1": ["red_light", "night"] }
-    model_outputs: dict { "vid_1": ["red_light", "intersection"] }
+    computes model performance metrics.
 
-    The outputs can just be the words split up by spaces.
+    Returns a dictionary with keys
+    true positives (TP), true negatives (TN), false positives (FP), false negatives (FN).
     """
-    results = {}
+    results = {
+        "TP": 0,
+        "TN": 0,
+        "FP": 0,
+        "FN": 0,
+    }
 
-    for vid, gt_tags in manual_labels.items():
+    for vid, _ in manual_labels.items():
+        expected_timestamp = manual_labels[vid]['timestamps']
+        expected_keywords = manual_labels[vid]['risk']
         if vid not in model_outputs:
             continue
 
-        pred_tags = set(model_outputs[vid])
-        gt_tags = set(gt_tags)
+        if len(expected_timestamp) == 0: # nothing occurred
+            if len(model_outputs[vid]) == 0: # nothing predicted
+                results["TN"] += 1
+            else: # something predicted
+                results["FP"] += len(model_outputs[vid])
+            continue
 
-        # Intersection over Union (Jaccard)
-        intersection = gt_tags.intersection(pred_tags)
-        union = gt_tags.union(pred_tags)
-        jaccard = len(intersection) / len(union) if union else 0
+        # interval for where we expect a warning
+        t0, t1 = expected_timestamp
 
-        # Precision (How many predicted tags were right?)
-        precision = len(intersection) / len(pred_tags) if pred_tags else 0
+        if len(model_outputs[vid]) == 0: # nothing predicted
+            results["FN"] += 1
+            continue
+        
+        for _, timestamp, _ in model_outputs[vid]:
+            if t0 <= timestamp and timestamp <= t1:
+                results["TP"] += 1
+            elif timestamp < t0 or timestamp > t1:
+                results["FP"] += 1
 
-        # Recall (How many ground truth tags did we find?)
-        recall = len(intersection) / len(gt_tags) if gt_tags else 0
+    # normalize results to get precision, recall, jaccard
+    tp = results["TP"]
+    tn = results["TN"]
+    fp = results["FP"]
+    fn = results["FN"]
 
-        results[vid] = {
-            "jaccard": round(jaccard, 3),
-            "precision": round(precision, 3),
-            "recall": round(recall, 3)
-        }
+    results["precision"] = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+    results["recall"] = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    results["jaccard"] = tp / (tp + fp + fn) if (tp + fp + fn) > 0 else 0.0
 
     return results
 
 
-def load_labels(labels_path: str) -> Dict[str, List[str]]:
+def save_perf_metrics(perf_metrics: Dict[str, Dict[str, float]], output_path: str) -> None:
+    """Save performance metrics to a JSON file."""
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(perf_metrics, f, indent=4)
+
+
+def load_labels(labels_path: str):
     """Load manual labels from JSON if the file exists."""
     if not os.path.exists(labels_path):
         return {}
 
     with open(labels_path, "r", encoding="utf-8") as f:
         data = json.load(f)
-
-    normalized = {}
-    for video_name, tags in data.items():
-        normalized[video_name] = [str(tag).strip().lower() for tag in tags]
-    return normalized
-
-
-def extract_tags_from_commentary(llm_output: List[tuple[int, str]]) -> List[str]:
-    """Convert generated commentary text into token-level tags."""
-    tags: List[str] = []
-    for _, commentary in llm_output:
-        tags.extend(re.findall(r"[a-z0-9_'-]+", commentary.lower()))
-    return tags
-
-
-def summarize_metrics(per_video_metrics: Dict[str, Dict[str, float]]) -> Dict[str, float]:
-    """Compute dataset-level averages for jaccard, precision, and recall."""
-    if not per_video_metrics:
-        return {"jaccard": 0.0, "precision": 0.0, "recall": 0.0}
-
-    count = len(per_video_metrics)
-    return {
-        "jaccard": round(sum(m["jaccard"] for m in per_video_metrics.values()) / count, 3),
-        "precision": round(sum(m["precision"] for m in per_video_metrics.values()) / count, 3),
-        "recall": round(sum(m["recall"] for m in per_video_metrics.values()) / count, 3),
-    }
+    
+    return data
 
 
 def run_pipeline_over_dataset(
     video_dir: str,
+    output_dir: str,
     labels_path: str,
     obj_detection_model: str,
+    yolo_weights_path: str,
     llm_model_name: str,
     visualize: bool,
+    max_videos: int = None,
 ) -> None:
     """Initialize pipeline components and evaluate all videos in the dataset."""
     keywords = [
         # alert keywords
-        "caution", "warning", "attention", "danger", "watch out",
+        # "caution", "warning", "attention", "danger", "watch out",
 
         # object keywords
         "pedestrian", "vehicle", "bicycle", "motorcycle",
         "traffic light", "stop sign", "red light", "green light", "yellow light",
 
         # action keywords
-        "slow down", "speed up", "turn left",
-        "turn right", "stop", "go",
+        # "slow down", "speed up", "turn left",
+        # "turn right", "stop", "go",
 
         # directions
-        "ahead", "left", "right", "behind",
+        # "ahead", "left", "right", "behind",
     ]
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    detector = ObjectDetector(obj_detection_model, device=device)
-    prompt_constructor = PromptConstructor(keywords)
+    detector = ObjectDetector(obj_detection_model, device=device, yolo_weights_path=yolo_weights_path)
+    prompt_constructor = PromptConstructor()#keywords=keywords)
     commentary_generator = CommentaryGenerator(llm_model_name, device=device)
 
     dataset = VideoDataset(root_dir=video_dir)
@@ -127,10 +131,18 @@ def run_pipeline_over_dataset(
     )
 
     manual_labels = load_labels(labels_path)
+    print(f"Loaded manual labels for {len(manual_labels)} videos from {labels_path}.")
     model_outputs: Dict[str, List[str]] = {}
+    perf_metrics = {}
 
     print(f"Found {len(dataset)} videos. Running full pipeline...")
-    for idx in range(len(dataset)):
+    
+    if max_videos is not None:
+        print(f"Limiting to max {max_videos} videos for testing.")
+    else:
+        max_videos = len(dataset)
+    
+    for idx in range(max_videos):
         video_name = dataset.get_video_name(idx)
         is_opened, _ = dataset[idx]
         if not is_opened:
@@ -138,10 +150,10 @@ def run_pipeline_over_dataset(
             continue
 
         pipeline.reset()
-        llm_output = pipeline.loop(visualize=visualize)
-        model_outputs[video_name] = extract_tags_from_commentary(llm_output)
-        print(f"{llm_output}")
-        print(f"Processed {idx + 1}/{len(dataset)}: {video_name}")
+        llm_output = pipeline.loop(visualize=visualize, output_dir=output_dir)
+        model_outputs[video_name] = llm_output
+        perf_metrics[video_name] = pipeline.get_metrics()
+        print(f"Processed {idx + 1}/{max_videos}: {video_name}")
 
     print("\nPipeline run complete.")
 
@@ -149,15 +161,16 @@ def run_pipeline_over_dataset(
         print(f"No labels found at {labels_path}. Skipping metric computation.")
         return
 
-    per_video_metrics = calculate_metrics(manual_labels, model_outputs)
-    final_metrics = summarize_metrics(per_video_metrics)
-
-    print("\nPer-video metrics:")
-    for video_name, metrics in per_video_metrics.items():
-        print(f"- {video_name}: {metrics}")
-
-    print("\nFinal metrics:")
-    print(final_metrics)
+    results = calculate_metrics(manual_labels, model_outputs)
+    save_perf_metrics(perf_metrics, os.path.join(output_dir, "performance_metrics.json"))
+    print("\nEvaluation Metrics:")
+    print(f"True Positives: {results['TP']}")
+    print(f"True Negatives: {results['TN']}")
+    print(f"False Positives: {results['FP']}")
+    print(f"False Negatives: {results['FN']}")
+    print(f"Precision: {results['precision']:.4f}")
+    print(f"Recall: {results['recall']:.4f}")
+    print(f"Jaccard Index: {results['jaccard']:.4f}")
 
 
 def main() -> None:
@@ -171,14 +184,30 @@ def main() -> None:
         help="Directory containing input videos.",
     )
     parser.add_argument(
+        "--output-dir",
+        default=os.path.join("eval_videos"),
+        help="Directory to save output videos and metrics.",
+    )
+    parser.add_argument(
+        "--max-videos",
+        default=None,
+        type=int,
+        help="Maximum number of videos to process.",
+    )
+    parser.add_argument(
         "--labels-path",
-        default="labels.json",
+        default=os.path.join("data", "reddit_dashcam_videos", "labels.json"),
         help="Path to manual labels JSON generated by annotator.py.",
     )
     parser.add_argument(
         "--object-model",
         default="PekingU/rtdetr_r50vd",
         help="Hugging Face model id for object detection.",
+    )
+    parser.add_argument(
+        "--yolo-weights-path",
+        default=os.path.join("models", "fine_tuned_yolo_weights", "best.pt"),
+        help="Path to YOLO weights file (if using YOLO).",
     )
     parser.add_argument(
         "--llm-model",
@@ -192,12 +221,19 @@ def main() -> None:
     )
 
     args = parser.parse_args()
+
+    # make directory for output videos if it doesn't exist
+    os.makedirs(args.output_dir, exist_ok=True)
+    
     run_pipeline_over_dataset(
         video_dir=args.video_dir,
+        output_dir=args.output_dir,
         labels_path=args.labels_path,
         obj_detection_model=args.object_model,
+        yolo_weights_path=args.yolo_weights_path,
         llm_model_name=args.llm_model,
         visualize=args.visualize,
+        max_videos=args.max_videos,
     )
 
 

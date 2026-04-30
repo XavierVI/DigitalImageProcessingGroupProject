@@ -5,68 +5,87 @@ import json
 
 
 class PromptConstructor:
-    def __init__(self, keywords: List[str]):
-        self.keywords = keywords
-        # Define a consistent system instruction
-        self.base_instruction = (
-            f"You are a professional driving assistant. "
-            "Analyze the following data and provide concise, "
-            "safety-critical alerts."
-        )
-        self.base_instruction += (
-            f"\nFocus on these keywords: {', '.join(self.keywords)}."
+    def __init__(self, keywords: List[str] = None):
+        # self.base_instruction = (
+        #     f"You are a professional driving assistant. "
+        #     "Analyze the following data and provide concise, "
+        #     "safety-critical alerts."
+        # )
+
+        self.system_instruction = (
+            "You are a critical driving safety assistant. Analyze the temporal scene data "
+            "and identify immediate collision risks or traffic violations.\n\n"
+            "Rules:\n"
+            "1. Output ONLY valid JSON.\n"
+            "2. No markdown formatting, no explanations.\n"
+            "3. Use format: {\"warning\": true/false, \"message\": \"<brief hazard>\"}\n\n"
+            "Example Input:\n"
+            "Timestep 0:\n- Pedestrian: close ahead, approaching rapidly\n\n"
+            "Example Output:\n"
+            "{\"warning\": true, \"message\": \"Pedestrian close ahead and approaching rapidly.\"}\n"
         )
 
-    def generate_prompt(self, frames, t) -> str:
+        if keywords:
+            self.system_instruction += (
+                f"\nFocus on using these elements: {', '.join(keywords)}.\n"
+            )
+
+    def generate_prompt(self, frames: List[List[Dict]], t: int):
         """Main method to generate a prompt for the LLM.
         
         Args:
-            frames: A list of detected objects over time. Each object is a dictionary
-                containing the keys: label, score, vel, centroid.
-            t: Current timestep (for temporal context)
+            frames: A list of frames over time. Each frame contains a list of detected objects.
+            t: Starting timestep (for temporal context)
         Returns:
-            A formatted string prompt for the LLM.
+            A dictionary with 'system' and 'user' keys for the LLM input.
         """
-        sections = [self.base_instruction]
+        user_content = []
 
-        for i, obj in enumerate(frames):
-            new_section = f"Timestep {t + i}: ```"
-            # extract relevant data for the current frame
+        for i, frame_objs in enumerate(frames):
+            user_content.append(f"Timestep {t + i}:\n")
 
-            num_objs, objs = self._format_detections(obj)
-            new_section += f"- number of objects: {num_objs}\n{objs}"
+            if not frame_objs:
+                user_content.append(" - No objects detected.")
+                continue
+            
+            for obj in frame_objs:
+                user_content.append(self._format_detections(obj))
 
-            if num_objs > 0:
-                new_section += "\n" + self._format_motion(obj, [])
+        return {
+            "system": self.system_instruction,
+            "user": "\n".join(user_content)
+        }
 
-        # Add the 'Ask' at the end
-        sections.append(
-            "\nFINAL TASK: Provide a concise summary and any urgent hazard warnings.")
+    def _format_detections(self, objs: Dict) -> str:
+        label = objs.get('label', 'unknown')
+        centroid = objs.get('centroid')
+        velocity = objs.get('velocity', (0, 0))
+        area = objs.get('area', 0)
 
-        return "\n".join(sections)
+        # spatial evaluation
+        if centroid:
+            cx, cy = centroid
+            position = "close ahead" if cy > 240 and area > 5000 else "far ahead"
+            side = "left" if cx < 320 else "right"
+            loc_str = f"{position}, {side} side"
+        else:
+            loc_str = "unknown location"
 
-    def _format_detections(self, objs: List[Dict]) -> tuple[int, str]:
-        if len(objs) == 0:
-            return 0, "Scene Status: No objects detected."
+        # Kinematic evaluation (CPU-side)
+        vx, vy = velocity
+        speed = (vx ** 2 + vy ** 2) ** 0.5
 
-        lines = []
-        for o in objs:
-            centroid = o.get('centroid', None)
-            if centroid:
-                cx, cy = centroid
-                # Assume standard dashcam resolution ~480 height, ~640 width
-                position = "close ahead" if cy > 240 else "far ahead"
-                side = "left" if cx < 320 else "right"
-                lines.append(
-                    f"  - {o['label']} ({o['score']:.0%} conf) "
-                    f"— {position}, {side} side"
-                )
-            else:
-                lines.append(f"  - {o['label']} ({o['score']:.0%} conf)")
+        if speed > 15:
+            motion_str = "approaching rapidly" if vy > 0 else "receding rapidly"
+        elif speed > 5:
+            motion_str = "approaching" if vy > 0 else "receding"
+        else:
+            motion_str = "static"
 
-        return len(lines), "Detected:\n" + "\n".join(lines)
+        # Dense, token-efficient string
+        return f"  - {label}: {loc_str}, {motion_str}"
 
-    def _format_motion(self, objs: List[Dict], motion: List[Dict]) -> str:
+    def _format_motion(self, objs: List[Dict]) -> str:
         lines = ["Motion:"]
 
         for obj in objs[:5]:

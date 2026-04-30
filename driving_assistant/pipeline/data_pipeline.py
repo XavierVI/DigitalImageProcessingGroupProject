@@ -12,12 +12,13 @@ from driving_assistant.object_detection.object_detector import ObjectDetector
 from driving_assistant.llm.prompt_constructor import PromptConstructor
 from driving_assistant.llm.commentary_generator import CommentaryGenerator
 
-from driving_assistant.utils.visualization import visualize_frame
+from driving_assistant.utils.visualization import visualize_frame, Visualizer
 
 # for running the LLM in parallel
 from concurrent.futures import ThreadPoolExecutor
 import time
 import psutil
+import os
 
 class DataPipeline:
     """
@@ -59,6 +60,15 @@ class DataPipeline:
         # format of each entry is (timestep, commentary)
         self.llm_commentary = []
 
+        # avg. metrics
+        self.avg_detection_time = 0.0
+        self.avg_llm_time = 0.0
+        self.avg_fps = 0.0
+        # tail performance
+        self.max_detection_time = 0.0
+        self.max_llm_time = 0.0
+        self.min_fps = float('inf')
+
     def _append_frame(self, frame):
         # maintain the sliding window
         if len(self.frames) > self.window_size:
@@ -69,6 +79,22 @@ class DataPipeline:
     def reset(self):
         self.frames = []
         self.llm_commentary = []
+        self.avg_detection_time = 0.0
+        self.avg_llm_time = 0.0
+        self.avg_fps = 0.0
+        self.max_detection_time = 0.0
+        self.max_llm_time = 0.0
+        self.min_fps = float('inf')
+
+    def get_metrics(self):
+        return {
+            "avg_fps": self.avg_fps,
+            "avg_detection_time_ms": self.avg_detection_time,
+            "avg_llm_time_ms": self.avg_llm_time,
+            "max_detection_time_ms": self.max_detection_time,
+            "max_llm_time_ms": self.max_llm_time,
+            "min_fps": self.min_fps,
+        }
 
     def _compute_motion(self, F_prev, F):
         """
@@ -132,7 +158,7 @@ class DataPipeline:
         return commentary, end_time - start_time
 
 
-    def loop(self, visualize=False) -> List[Tuple[int, str]]:
+    def loop(self, visualize=False, output_dir: str = "eval_videos") -> List[Tuple[int, int, str]]:
         """
         A loop that runs the pipeline
         indefinitely (or until the data stream ends).
@@ -152,6 +178,21 @@ class DataPipeline:
         executor = ThreadPoolExecutor(max_workers=1)
         pending_llm = None
 
+        if visualize:
+            h, w = self.datastream.get_height_width()
+            visualizer = Visualizer(
+                os.path.join(
+                    output_dir, f"{self.datastream.get_current_video_name()}"),
+                height=h, width=w
+            )
+
+        metrics = {
+            "fps": 0.0,
+            "obj_count": 0,
+            "avg_det_ms": 0.0,
+            "avg_llm_ms": 0.0,
+        }
+
         while True:
             # collect frames
             # push the first frame
@@ -167,9 +208,6 @@ class DataPipeline:
 
             self._append_frame(detected_obj)
             frame_count += 1
-
-            if visualize:
-                visualize_frame(frame, detected_obj)
 
             for i in range(self.window_size):
                 success, frame = self.datastream.step()
@@ -192,8 +230,16 @@ class DataPipeline:
                         "avg_det_ms": (total_detection_time / frame_count) * 1000,
                         "avg_llm_ms": (total_llm_time / max(t, 1)) * 1000,
                     }
+                    # Track min/max for tail performance
+                    self.max_detection_time = max(self.max_detection_time, metrics["avg_det_ms"])
+                    self.max_llm_time = max(self.max_llm_time, metrics["avg_llm_ms"])
+                    self.min_fps = min(self.min_fps, metrics["fps"])
 
-                    visualize_frame(frame, detected_obj, metrics=metrics)
+                    visualizer.update(
+                        frame, detected_obj,
+                        metrics=metrics,
+                        commentary=self.llm_commentary[-1][2] if len(self.llm_commentary) > 0 else None
+                    )
 
             # initialize prompt generation
             prompt = self.prompt_constructor.generate_prompt(
@@ -201,9 +247,16 @@ class DataPipeline:
                 t=t - len(self.frames)
             )
             if pending_llm is not None:
+                # commentary is a dictionary with keys "warning" (bool) and "message" (str)
                 commentary, llm_elapsed = pending_llm.result()
                 total_llm_time += llm_elapsed
-                self.llm_commentary.append((t, commentary))
+                
+                if 'warning' in commentary and commentary['warning']:
+                    timestamp = self.datastream.get_current_time()
+                    self.llm_commentary.append((t, timestamp, commentary["message"]))
+                
+                # allow another LLM inference
+                pending_llm = None
             else:
                 # start inference
                 pending_llm = executor.submit(self._timed_llm_generate, prompt)
@@ -236,6 +289,14 @@ class DataPipeline:
             #         print(f"GPU memory used:               {gpu_used:.1f} MB")
 
         if visualize:
-            cv2.destroyAllWindows()
+            visualizer.release()
+            # cv2.destroyAllWindows()
+
+        # Calculate final metrics based on totals
+        if frame_count > 0:
+            total_pipeline_time = total_detection_time + total_llm_time
+            self.avg_fps = frame_count / total_pipeline_time if total_pipeline_time > 0 else 0
+            self.avg_detection_time = (total_detection_time / frame_count) * 1000  # in ms
+            self.avg_llm_time = (total_llm_time / max(t, 1)) * 1000  # in ms
 
         return self.llm_commentary

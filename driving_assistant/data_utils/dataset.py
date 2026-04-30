@@ -27,6 +27,7 @@ class VideoDataset(torch.utils.data.Dataset):
         ]
         # current video which is open
         self.curr_video = None
+        self.curr_video_idx = -1
 
     def step(self):
         """
@@ -52,6 +53,28 @@ class VideoDataset(torch.utils.data.Dataset):
         Get the name of the video at index idx.
         """
         return self.files[idx]
+
+    def get_current_video_name(self):
+        """
+        Get the name of the current video.
+        """
+        if self.curr_video is None:
+            return None
+        return self.get_video_name(self.curr_video_idx)
+
+    def get_current_time(self) -> float:
+        """Returns current position in seconds."""
+        if self.curr_video is None:
+            return 0.0
+        return self.curr_video.get(cv2.CAP_PROP_POS_MSEC) / 1000.0
+
+    def get_height_width(self):
+        """Returns height and width of the current video."""
+        if self.curr_video is None:
+            return None, None
+        height = int(self.curr_video.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        width = int(self.curr_video.get(cv2.CAP_PROP_FRAME_WIDTH))
+        return height, width
 
     def __len__(self):
         """
@@ -84,6 +107,8 @@ class VideoDataset(torch.utils.data.Dataset):
 
         # read the first frame
         _, frame = self.step()
+
+        self.curr_video_idx = idx
 
         return is_opened, frame
 

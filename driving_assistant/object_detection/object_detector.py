@@ -11,6 +11,8 @@ from transformers import (
     RTDetrForObjectDetection,
 )
 
+from ultralytics import YOLO
+
 import os
 
 class ObjectDetector:
@@ -22,7 +24,7 @@ class ObjectDetector:
         device: Device to run inference on (cuda or cpu)
     """
 
-    def __init__(self, obj_detection_model, device=None):
+    def __init__(self, obj_detection_model, device=None, yolo_weights_path: Optional[str] = None):
         """Initialize the object detector.
 
         Args:
@@ -61,8 +63,10 @@ class ObjectDetector:
             print(f"Set object detection function to {self.detection_func}.")
 
         elif obj_detection_model == "yolo":
-            # Initialize YOLO model (example, replace with actual YOLO initialization)
-            pass
+            self.obj_det_model = YOLO(yolo_weights_path)
+            self.obj_det_model.to(self.device)
+            self.yolo_inference_device = str(self.device)
+            self.yolo_fallback_device = "cpu"
             self.detection_func = self._yolo_detection
 
         # set to evaluation mode for faster inference
@@ -83,9 +87,61 @@ class ObjectDetector:
 
 
     def _yolo_detection(self, frame, threshold: float = 0.9) -> List[Dict]:
-        # Placeholder for YOLO detection logic
-        # Implement YOLO detection and return results in the same format as DETR
-        pass
+        try:
+            results = self.obj_det_model.predict(
+                source=frame,
+                conf=threshold,
+                device=self.yolo_inference_device,
+                verbose=False,
+            )
+        except (NotImplementedError, RuntimeError) as exc:
+            message = str(exc)
+            if "torchvision::nms" not in message and "CUDA" not in message:
+                raise
+
+            if self.yolo_inference_device != self.yolo_fallback_device:
+                print(
+                    "Warning: YOLO CUDA inference is unavailable in this environment; "
+                    "falling back to CPU."
+                )
+                self.yolo_inference_device = self.yolo_fallback_device
+
+            self.obj_det_model.to(self.yolo_fallback_device)
+            results = self.obj_det_model.predict(
+                source=frame,
+                conf=threshold,
+                device=self.yolo_fallback_device,
+                verbose=False,
+            )
+
+        if not results:
+            return []
+
+        prediction = results[0]
+        boxes = prediction.boxes
+        if boxes is None or len(boxes) == 0:
+            return []
+
+        xyxy = boxes.xyxy.detach().cpu()
+        scores = boxes.conf.detach().cpu()
+        class_ids = boxes.cls.detach().cpu().long()
+        centroids = (xyxy[:, :2] + xyxy[:, 2:]) / 2.0
+
+        names = prediction.names or getattr(self.obj_det_model, "names", {})
+
+        return [
+            {
+                "label": names.get(int(class_id), str(int(class_id)))
+                if isinstance(names, dict)
+                else names[int(class_id)],
+                "score": round(float(score), 3),
+                "box": torch.round(box, decimals=2).tolist(),
+                "centroid": torch.round(centroid, decimals=2).tolist(),
+                "area": round(float((box[2] - box[0]) * (box[3] - box[1])), 2)
+            }
+            for box, score, class_id, centroid in zip(xyxy, scores, class_ids, centroids)
+        ]
+
 
 
     def _detr_detection(self, frame, threshold: float = 0.9) -> List[Dict]:
@@ -129,7 +185,8 @@ class ObjectDetector:
                 "label": id2label[lbl],
                 "score": sc,
                 "box": bx,
-                "centroid": ct
+                "centroid": ct,
+                "area": round(float((bx[2] - bx[0]) * (bx[3] - bx[1])), 2)
             }
             for lbl, sc, bx, ct in
             zip(labels_list, scores_list, boxes_list, centroids_list)

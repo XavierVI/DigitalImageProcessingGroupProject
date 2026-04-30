@@ -11,6 +11,10 @@ from transformers import (
 )
 
 import os
+# import ollama
+
+import requests
+import json
 
 class CommentaryGenerator:
     """Generates natural language commentary from prompts using a pre-trained LLM.
@@ -70,7 +74,7 @@ class CommentaryGenerator:
                 attn_implementation = "eager",
                 # force_download = True
             )
-            self.commentary_method = self.llm_generate
+            self.commentary_method = self._llm_generate
 
         elif hugging_face_model == "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B":
             self.tokenizer = AutoTokenizer.from_pretrained(
@@ -83,7 +87,7 @@ class CommentaryGenerator:
                 hugging_face_model,
                 cache_dir=os.path.join(os.getcwd(), "models"),
             )
-            self.commentary_method = self.llm_generate
+            self.commentary_method = self._llm_generate
 
         elif hugging_face_model == "deepseek-ai/DeepSeek-V3.2":
             quant_config = BitsAndBytesConfig(
@@ -104,12 +108,12 @@ class CommentaryGenerator:
                 trust_remote_code=True
             )
 
-            self.commentary_method = self.llm_generate
+            self.commentary_method = self._llm_generate
 
         elif hugging_face_model == "Qwen/Qwen2.5-1.5B-Instruct":
             self.tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-1.5B-Instruct")
             self.model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-1.5B-Instruct")
-            self.commentary_method = self.llm_generate
+            self.commentary_method = self._llm_generate
 
         else:
             raise ValueError(
@@ -136,7 +140,7 @@ class CommentaryGenerator:
         )
 
 
-    def generate(self, prompt: str) -> str:
+    def generate(self, prompt: str) -> dict:
         """Generate commentary from a prompt.
 
         Args:
@@ -146,14 +150,12 @@ class CommentaryGenerator:
         """
         return self.commentary_method(prompt)
 
-    def llm_generate(self, prompt: str) -> str:
+    def _llm_generate(self, prompt: str) -> dict:
         messages = [
-            {
-                "role": "system",
-                "content": "You are an expert driving assistant. Analyze the detected objects from dashcam footage and warn the driver about any immediate risks. Be specific about what the object is, where it is, and what action to take."
-            },
-            {"role": "user", "content": prompt}
+            {"role": "system", "content": prompt["system"]},
+            {"role": "user", "content": prompt["user"]}
         ]
+
         inputs = self.tokenizer.apply_chat_template(
             messages,
             add_generation_prompt=True,
@@ -174,7 +176,16 @@ class CommentaryGenerator:
         if "</think>" in full_response:
             full_response = full_response.split("</think>")[-1].strip()
 
-        return full_response
+        try:
+            clean_json = full_response.replace("```json", "").replace("```", "").strip()
+            # print(f"LLM raw response: {full_response}")
+            return json.loads(clean_json)
+
+        except json.JSONDecodeError:
+            print("Warning: Failed to parse LLM output as JSON. Returning empty response.")
+            # print(f"Raw LLM output: {full_response}")
+            return {"warning": False, "message": ""}
+
 
     def _t5_generate(self, prompt: str) -> str:
         """Generate commentary from a prompt.
@@ -207,5 +218,39 @@ class CommentaryGenerator:
 
         # Decode output
         commentary = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
-        return commentary
+
+        try:
+            return json.loads(commentary)
+
+        except json.JSONDecodeError:
+            # we should always return this, because a failure to
+            # properly parse the prompt should be considered a failure
+            return {"warning": False, "message": ""}
+
+
+    # def _ollama_generate(self, prompt: str) -> str:
+    #     """Generate commentary using Ollama's API.
+
+    #     Args:
+    #         prompt (str): Input prompt for the LLM
+
+    #     Returns:
+    #         str: Generated commentary text
+    #     """
+    #     response = ollama.chat(
+    #         model=self.model_name,
+    #         messages=[
+    #             {
+    #                 "role": "system",
+    #                 "content": "You are an expert driving assistant. Analyze the detected objects from dashcam footage and warn the driver about any immediate risks. Be specific about what the object is, where it is, and what action to take."
+    #             },
+    #             {"role": "user", "content": prompt}
+    #         ],
+    #         max_tokens=self.max_new_tokens,
+    #         temperature=0.0,
+    #         top_p=1.0,
+    #         frequency_penalty=0.0,
+    #         presence_penalty=0.0,
+    #     )
+    #     return response.text.strip()
 
