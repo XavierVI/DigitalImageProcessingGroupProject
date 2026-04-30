@@ -13,6 +13,7 @@ from driving_assistant.data_utils.dataset import VideoDataset
 from driving_assistant.llm.commentary_generator import CommentaryGenerator
 from driving_assistant.llm.prompt_constructor import PromptConstructor
 from driving_assistant.object_detection.object_detector import ObjectDetector
+from driving_assistant.object_detection.combined_detector import CombinedDetector
 from driving_assistant.pipeline.data_pipeline import DataPipeline
 
 
@@ -193,6 +194,8 @@ def run_pipeline_over_dataset(
     llm_model_name: str,
     visualize: bool,
     max_videos: int | None = None,
+    combined_detection: bool = False,
+    sign_weights_path: str | None = None,
 ) -> None:
     """Initialize pipeline components and evaluate all videos in the dataset."""
     keywords = [
@@ -214,11 +217,27 @@ def run_pipeline_over_dataset(
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    detector = ObjectDetector(
-        obj_detection_model,
-        device=device,
-        yolo_weights_path=yolo_weights_path,
-    )
+    # Initialize detector
+    if combined_detection:
+        print("\n=== Using Combined Detection (Vehicle + Traffic Signs) ===")
+        if not sign_weights_path:
+            raise ValueError("--sign-weights required when using --combined-detection")
+        detector = CombinedDetector(
+            vehicle_model=obj_detection_model,
+            sign_model="yolo",
+            sign_yolo_weights=sign_weights_path,
+            device=device,
+        )
+        print(f"Vehicle model: {obj_detection_model}")
+        print(f"Sign model: YOLOv8 ({sign_weights_path})")
+    else:
+        print("\n=== Using Standard Detection ===")
+        detector = ObjectDetector(
+            obj_detection_model,
+            device=device,
+            yolo_weights_path=yolo_weights_path,
+        )
+        print(f"Object model: {obj_detection_model}")
     prompt_constructor = PromptConstructor(keywords)
     commentary_generator = CommentaryGenerator(llm_model_name, device=device)
 
@@ -306,6 +325,16 @@ def main() -> None:
         help="Path to custom YOLO weights (.pt) to use when --object-model yolo.",
     )
     parser.add_argument(
+        "--combined-detection",
+        action="store_true",
+        help="Use combined vehicle + traffic sign detection (DETR + YOLOv8).",
+    )
+    parser.add_argument(
+        "--sign-weights",
+        default=None,
+        help="Path to traffic sign YOLO weights (.pt) for combined detection.",
+    )
+    parser.add_argument(
         "--llm-model",
         default="google/flan-t5-small",
         help="Hugging Face model id for commentary generation.",
@@ -337,6 +366,8 @@ def main() -> None:
         llm_model_name=args.llm_model,
         visualize=args.visualize,
         max_videos=args.max_videos if args.max_videos is not None else args.max_video,
+        combined_detection=args.combined_detection,
+        sign_weights_path=args.sign_weights,
     )
 
 
