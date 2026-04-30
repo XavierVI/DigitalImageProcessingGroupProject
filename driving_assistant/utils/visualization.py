@@ -13,11 +13,21 @@ def visualize_frame(frame, detected_obj, metrics=None):
 
     for obj in detected_obj:
         bx = [int(i) for i in obj["box"]]
+        
+        # Choose color based on detection type
+        detection_type = obj.get('detection_type', 'vehicle')
+        if detection_type == 'traffic_sign':
+            box_color = (0, 165, 255)  # Orange for traffic signs
+            text_color = (0, 165, 255)
+        else:
+            box_color = (255, 0, 0)  # Blue for vehicles
+            text_color = (255, 0, 0)
+        
         cv2.rectangle(
             annotated,
             (bx[0], bx[1]),
             (bx[2], bx[3]),
-            (255, 0, 0),
+            box_color,
             2,
         )
 
@@ -34,13 +44,15 @@ def visualize_frame(frame, detected_obj, metrics=None):
                 tipLength=0.3,
             )
 
+        # Format label with score and type
+        label_text = f"{obj['label']} ({obj.get('score', 0):.2f})"
         cv2.putText(
             annotated,
-            str(obj["label"]),
+            label_text,
             (bx[0], max(20, bx[1] - 10)),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.6,
-            (255, 0, 0),
+            text_color,
             2,
             cv2.LINE_AA,
         )
