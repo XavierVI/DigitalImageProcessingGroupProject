@@ -100,25 +100,25 @@ def run_pipeline_over_dataset(
     """Initialize pipeline components and evaluate all videos in the dataset."""
     keywords = [
         # alert keywords
-        "caution", "warning", "attention", "danger", "watch out",
+        # "caution", "warning", "attention", "danger", "watch out",
 
         # object keywords
         "pedestrian", "vehicle", "bicycle", "motorcycle",
         "traffic light", "stop sign", "red light", "green light", "yellow light",
 
         # action keywords
-        "slow down", "speed up", "turn left",
-        "turn right", "stop", "go",
+        # "slow down", "speed up", "turn left",
+        # "turn right", "stop", "go",
 
         # directions
-        "ahead", "left", "right", "behind",
+        # "ahead", "left", "right", "behind",
     ]
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
     detector = ObjectDetector(obj_detection_model, device=device, yolo_weights_path=yolo_weights_path)
-    prompt_constructor = PromptConstructor(keywords)
+    prompt_constructor = PromptConstructor()#keywords=keywords)
     commentary_generator = CommentaryGenerator(llm_model_name, device=device)
 
     dataset = VideoDataset(root_dir=video_dir)

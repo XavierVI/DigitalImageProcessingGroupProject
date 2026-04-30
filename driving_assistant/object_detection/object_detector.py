@@ -137,6 +137,7 @@ class ObjectDetector:
                 "score": round(float(score), 3),
                 "box": torch.round(box, decimals=2).tolist(),
                 "centroid": torch.round(centroid, decimals=2).tolist(),
+                "area": round(float((box[2] - box[0]) * (box[3] - box[1])), 2)
             }
             for box, score, class_id, centroid in zip(xyxy, scores, class_ids, centroids)
         ]
@@ -184,7 +185,8 @@ class ObjectDetector:
                 "label": id2label[lbl],
                 "score": sc,
                 "box": bx,
-                "centroid": ct
+                "centroid": ct,
+                "area": round(float((bx[2] - bx[0]) * (bx[3] - bx[1])), 2)
             }
             for lbl, sc, bx, ct in
             zip(labels_list, scores_list, boxes_list, centroids_list)

@@ -152,12 +152,10 @@ class CommentaryGenerator:
 
     def _llm_generate(self, prompt: str) -> dict:
         messages = [
-            {
-                "role": "system",
-                "content": "You are an expert driving assistant. Analyze the detected objects from dashcam footage and warn the driver about any immediate risks. Be specific about what the object is, where it is, and what action to take."
-            },
-            {"role": "user", "content": prompt}
+            {"role": "system", "content": prompt["system"]},
+            {"role": "user", "content": prompt["user"]}
         ]
+
         inputs = self.tokenizer.apply_chat_template(
             messages,
             add_generation_prompt=True,
@@ -179,9 +177,13 @@ class CommentaryGenerator:
             full_response = full_response.split("</think>")[-1].strip()
 
         try:
-            return json.loads(full_response)
+            clean_json = full_response.replace("```json", "").replace("```", "").strip()
+            # print(f"LLM raw response: {full_response}")
+            return json.loads(clean_json)
 
         except json.JSONDecodeError:
+            print("Warning: Failed to parse LLM output as JSON. Returning empty response.")
+            # print(f"Raw LLM output: {full_response}")
             return {"warning": False, "message": ""}
 
 

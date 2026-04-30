@@ -251,9 +251,12 @@ class DataPipeline:
                 commentary, llm_elapsed = pending_llm.result()
                 total_llm_time += llm_elapsed
                 
-                if commentary['warning']:
+                if 'warning' in commentary and commentary['warning']:
                     timestamp = self.datastream.get_current_time()
                     self.llm_commentary.append((t, timestamp, commentary["message"]))
+                
+                # allow another LLM inference
+                pending_llm = None
             else:
                 # start inference
                 pending_llm = executor.submit(self._timed_llm_generate, prompt)
