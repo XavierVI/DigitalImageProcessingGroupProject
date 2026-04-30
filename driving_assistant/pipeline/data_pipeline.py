@@ -118,19 +118,24 @@ class DataPipeline:
         # Extract centroids into (K, 2) arrays.
         # N is number of objects in current frame, M is previous frame.
         curr_centroids = np.array(
-            [obj["centroid"] for obj in F],
-            dtype=np.float32,
+            [obj["centroid"] for obj in F], dtype=np.float32,
         ).reshape(-1, 2)
         prev_centroids = np.array(
-            [obj_prev["centroid"] for obj_prev in F_prev],
-            dtype=np.float32,
+            [obj_prev["centroid"] for obj_prev in F_prev], dtype=np.float32,
         ).reshape(-1, 2)
+
+        # Extract object labels
+        curr_labels = np.array([obj["integer_label"] for obj in F])
+        prev_labels = np.array([obj["integer_label"] for obj in F_prev])
 
         # Compute the distance between object N and M
         # Shape: (N, 1, 2) - (1, M, 2) -> (N, M, 2)
-        diff = curr_centroids[:, np.newaxis, :] - \
-            prev_centroids[np.newaxis, :, :]
+        diff = curr_centroids[:, np.newaxis, :] - prev_centroids[np.newaxis, :, :]
         dist_matrix = np.linalg.norm(diff, axis=2)  # Shape: (N, M)
+
+        # Set distance to inf for label mismatches to prevent incorrect associations
+        label_mismatch = curr_labels[:, np.newaxis] != prev_labels[np.newaxis, :] # Shape: (N, M)
+        dist_matrix[label_mismatch] = np.inf
 
         # Find index of minimum distance for each object in current frame
         min_dist_indices = np.argmin(dist_matrix, axis=1)
@@ -147,7 +152,7 @@ class DataPipeline:
                 # diff[i, idx_prev] is (curr - prev)
                 obj["velocity"] = tuple(diff[i, idx_prev].tolist())
             else:
-                obj["velocity"] = (0, 0)
+                obj["velocity"] = (0.0, 0.0)
 
         return F
 

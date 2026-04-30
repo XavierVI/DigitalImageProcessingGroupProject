@@ -134,6 +134,7 @@ class ObjectDetector:
                 "label": names.get(int(class_id), str(int(class_id)))
                 if isinstance(names, dict)
                 else names[int(class_id)],
+                "integer_label": int(class_id),
                 "score": round(float(score), 3),
                 "box": torch.round(box, decimals=2).tolist(),
                 "centroid": torch.round(centroid, decimals=2).tolist(),
@@ -183,6 +184,7 @@ class ObjectDetector:
         detected_objects = [
             {
                 "label": id2label[lbl],
+                "integer_label": lbl,
                 "score": sc,
                 "box": bx,
                 "centroid": ct,
