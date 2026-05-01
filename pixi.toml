@@ -13,7 +13,9 @@ yolo_exp = "python main.py --video-dir=data/traffic_light_detection --visualize 
 
 test = "python main.py --visualize --llm-model=Qwen/Qwen2.5-1.5B-Instruct --object-model=PekingU/rtdetr_r50vd --max-videos=1"
 
-yolo_test = "python main.py --video-dir=data/traffic_light_detection --visualize --llm-model=Qwen/Qwen2.5-1.5B-Instruct --object-model=yolo --max-videos=1 --output-dir=traffic_light_eval"
+yolo_test = "python main.py --video-dir=data/traffic_light_detection --visualize --llm-model=Qwen/Qwen2.5-1.5B-Instruct --object-model=yolo --max-videos=1 --output-dir=traffic_light_eval_test"
+
+combined_test = "python examples/full_pipeline.py --video-path=data/reddit_dashcam_videos/video_40.mp4 --output-dir=pipeline_test --visualize --object-model=combined --llm-model=Qwen/Qwen2.5-1.5B-Instruct"
 
 
 [dependencies]
