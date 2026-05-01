@@ -15,6 +15,26 @@ from driving_assistant.object_detection.object_detector import ObjectDetector
 from driving_assistant.pipeline.data_pipeline import DataPipeline
 
 
+RISK_KEYWORDS = {
+    "cut-in": ["cut", "lane change", "merg"],
+    "tailgating": ["tailgat", "following", "too close"],
+    "pedestrian": ["pedestrian", "person", "crossing"],
+    "braking": ["brak", "slow", "stopping"],
+    "head-on": ["head-on", "oncoming", "collision"],
+    "cross-traffic": ["cross", "intersection", "traffic"],
+    "animal": ["animal", "deer", "dog"],
+    "speeding": ["speed", "fast", "rapid"],
+}
+
+
+def message_matches_risk(risk_label: str, message: str) -> bool:
+    message = message.lower()
+    for risk_type, keywords in RISK_KEYWORDS.items():
+        if risk_type in risk_label.lower():
+            return any(kw in message for kw in keywords)
+    return False
+
+
 def calculate_metrics(
     manual_labels: Dict[List[int, int], str],
     model_outputs: Dict[str, List[int, int, str]]) -> List[int, int, int, int]:
@@ -51,10 +71,14 @@ def calculate_metrics(
             results["FN"] += 1
             continue
         
-        for _, timestamp, _ in model_outputs[vid]:
+        for _, timestamp, message in model_outputs[vid]:
             if t0 <= timestamp and timestamp <= t1:
-                results["TP"] += 1
-            elif timestamp < t0 or timestamp > t1:
+                # check if the message contains expected keywords for the risk type
+                if message_matches_risk(expected_keywords, message):
+                    results["TP"] += 1
+                else: # message doesn't match expected risk keywords, count as false positive
+                    results["FP"] += 1
+            else:
                 results["FP"] += 1
 
     # normalize results to get precision, recall, jaccard
@@ -96,6 +120,7 @@ def run_pipeline_over_dataset(
     llm_model_name: str,
     visualize: bool,
     max_videos: int = None,
+    window_size: int = 10,
 ) -> None:
     """Initialize pipeline components and evaluate all videos in the dataset."""
     keywords = [
@@ -162,6 +187,7 @@ def run_pipeline_over_dataset(
         return
 
     results = calculate_metrics(manual_labels, model_outputs)
+    perf_metrics["accuracy_metrics"] = results
     save_perf_metrics(perf_metrics, os.path.join(output_dir, "performance_metrics.json"))
     print("\nEvaluation Metrics:")
     print(f"True Positives: {results['TP']}")
@@ -219,6 +245,12 @@ def main() -> None:
         action="store_true",
         help="Show frame visualizations while running.",
     )
+    parser.add_argument(
+        "--window-size",
+        default=10,
+        type=int,
+        help="Time window size in seconds for matching predictions to labels when computing metrics.",
+    )
 
     args = parser.parse_args()
 
@@ -234,6 +266,7 @@ def main() -> None:
         llm_model_name=args.llm_model,
         visualize=args.visualize,
         max_videos=args.max_videos,
+        window_size=args.window_size,
     )
 
 
