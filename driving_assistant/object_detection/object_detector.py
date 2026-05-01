@@ -48,6 +48,8 @@ class ObjectDetector:
                 cache_dir=os.path.join(os.getcwd(), "models")
             ).to(device)
             self.detection_func = self._detr_detection
+            # set to evaluation mode for faster inference
+            self.obj_det_model.eval()
 
         elif obj_detection_model == "PekingU/rtdetr_r50vd":
             self.processor = RTDetrImageProcessor.from_pretrained(
@@ -58,19 +60,42 @@ class ObjectDetector:
                 model,
                 cache_dir=os.path.join(os.getcwd(), "models")
             ).to(device)
-            print(f"Loaded {model} successfully.")
             self.detection_func = self._detr_detection
-            print(f"Set object detection function to {self.detection_func}.")
+            # set to evaluation mode for faster inference
+            self.obj_det_model.eval()
 
         elif obj_detection_model == "yolo":
-            self.obj_det_model = YOLO(yolo_weights_path)
-            self.obj_det_model.to(self.device)
+            self.yolo_model = YOLO(yolo_weights_path)
+            self.yolo_model.to(self.device)
             self.yolo_inference_device = str(self.device)
             self.yolo_fallback_device = "cpu"
             self.detection_func = self._yolo_detection
+            # set to evaluation mode for faster inference
+            self.yolo_model.eval()
 
-        # set to evaluation mode for faster inference
-        self.obj_det_model.eval()
+        elif obj_detection_model == "combined":
+            self.processor = RTDetrImageProcessor.from_pretrained(
+                "PekingU/rtdetr_r50vd",
+                cache_dir=os.path.join(os.getcwd(), "models")
+            )
+            self.obj_det_model = RTDetrForObjectDetection.from_pretrained(
+                "PekingU/rtdetr_r50vd",
+                cache_dir=os.path.join(os.getcwd(), "models")
+            ).to(device)
+            self.yolo_model = YOLO(yolo_weights_path)
+            self.yolo_model.to(self.device)
+            self.yolo_inference_device = str(self.device)
+            self.yolo_fallback_device = "cpu"
+            self.detection_func = self._combined_detection
+            # set to evaluation mode for faster inference
+            self.obj_det_model.eval()
+            self.yolo_model.eval()
+
+        else:
+            raise ValueError(
+                f"Unsupported object detection model: {obj_detection_model}. "
+                "Choose from: 'facebook/detr-resnet-50', 'PekingU/rtdetr_r50vd', 'yolo', or 'combined'."
+            )
 
 
     def detect(self, frame, threshold: float = 0.9) -> List[Dict]:
@@ -86,9 +111,18 @@ class ObjectDetector:
         return results
 
 
-    def _yolo_detection(self, frame, threshold: float = 0.9) -> List[Dict]:
+    def _combined_detection(self, frame, threshold: float = 0.9) -> List[Dict]:
+        # Run both YOLO and DETR detections and combine results
+        yolo_results = self._yolo_detection(frame, threshold=threshold)
+        detr_results = self._detr_detection(frame, threshold=threshold)
+
+        combined_results = yolo_results + detr_results
+        return combined_results
+
+
+    def _yolo_detection(self, frame, threshold: float = 0.9, offset: int = 0) -> List[Dict]:
         try:
-            results = self.obj_det_model.predict(
+            results = self.yolo_model.predict(
                 source=frame,
                 conf=threshold,
                 device=self.yolo_inference_device,
@@ -106,8 +140,8 @@ class ObjectDetector:
                 )
                 self.yolo_inference_device = self.yolo_fallback_device
 
-            self.obj_det_model.to(self.yolo_fallback_device)
-            results = self.obj_det_model.predict(
+            self.yolo_model.to(self.yolo_fallback_device)
+            results = self.yolo_model.predict(
                 source=frame,
                 conf=threshold,
                 device=self.yolo_fallback_device,
@@ -134,6 +168,7 @@ class ObjectDetector:
                 "label": names.get(int(class_id), str(int(class_id)))
                 if isinstance(names, dict)
                 else names[int(class_id)],
+                "integer_label": int(class_id) + offset, # add offset to avoid label conflicts when combining with DETR results
                 "score": round(float(score), 3),
                 "box": torch.round(box, decimals=2).tolist(),
                 "centroid": torch.round(centroid, decimals=2).tolist(),
@@ -183,6 +218,7 @@ class ObjectDetector:
         detected_objects = [
             {
                 "label": id2label[lbl],
+                "integer_label": lbl,
                 "score": sc,
                 "box": bx,
                 "centroid": ct,

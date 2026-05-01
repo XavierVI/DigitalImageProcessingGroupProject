@@ -118,19 +118,24 @@ class DataPipeline:
         # Extract centroids into (K, 2) arrays.
         # N is number of objects in current frame, M is previous frame.
         curr_centroids = np.array(
-            [obj["centroid"] for obj in F],
-            dtype=np.float32,
+            [obj["centroid"] for obj in F], dtype=np.float32,
         ).reshape(-1, 2)
         prev_centroids = np.array(
-            [obj_prev["centroid"] for obj_prev in F_prev],
-            dtype=np.float32,
+            [obj_prev["centroid"] for obj_prev in F_prev], dtype=np.float32,
         ).reshape(-1, 2)
+
+        # Extract object labels
+        curr_labels = np.array([obj["integer_label"] for obj in F])
+        prev_labels = np.array([obj["integer_label"] for obj in F_prev])
 
         # Compute the distance between object N and M
         # Shape: (N, 1, 2) - (1, M, 2) -> (N, M, 2)
-        diff = curr_centroids[:, np.newaxis, :] - \
-            prev_centroids[np.newaxis, :, :]
+        diff = curr_centroids[:, np.newaxis, :] - prev_centroids[np.newaxis, :, :]
         dist_matrix = np.linalg.norm(diff, axis=2)  # Shape: (N, M)
+
+        # Set distance to inf for label mismatches to prevent incorrect associations
+        label_mismatch = curr_labels[:, np.newaxis] != prev_labels[np.newaxis, :] # Shape: (N, M)
+        dist_matrix[label_mismatch] = np.inf
 
         # Find index of minimum distance for each object in current frame
         min_dist_indices = np.argmin(dist_matrix, axis=1)
@@ -147,7 +152,7 @@ class DataPipeline:
                 # diff[i, idx_prev] is (curr - prev)
                 obj["velocity"] = tuple(diff[i, idx_prev].tolist())
             else:
-                obj["velocity"] = (0, 0)
+                obj["velocity"] = (0.0, 0.0)
 
         return F
 
@@ -216,9 +221,9 @@ class DataPipeline:
 
                 detection_start = time.time()
                 detected_obj = self.obj_detection_model.detect(frame)
+                detected_obj = self._compute_motion(self.frames[-1], detected_obj)
                 total_detection_time += time.time() - detection_start
 
-                detected_obj = self._compute_motion(self.frames[-1], detected_obj)
                 self._append_frame(detected_obj)
                 frame_count += 1
                 total_time = total_detection_time
@@ -262,31 +267,6 @@ class DataPipeline:
                 pending_llm = executor.submit(self._timed_llm_generate, prompt)
 
             t += 1
-
-        #Printing Metrics
-            # print all metrics
-            # if frame_count > 0:
-            #     total_time = total_detection_time + total_llm_time
-            #     fps = frame_count / total_time if total_time > 0 else 0
-            #     avg_objects = sum(len(f) for f in self.frames) / max(len(self.frames), 1)
-            #     avg_confidence = sum(all_scores) / len(all_scores) if all_scores else 0
-            #     ram_used = psutil.Process().memory_info().rss / 1024 ** 2
-
-            #     print(f"\nPipeline Metrics")
-            #     print(f"Total frames processed:        {frame_count}")
-            #     print(f"Total pipeline time:           {total_time:.2f}s")
-            #     print(f"Pipeline FPS:                  {fps:.2f}")
-            #     print(f"Total detection time:          {total_detection_time:.2f}s")
-            #     print(f"Avg detection time per frame:  {total_detection_time / frame_count:.3f}s")
-            #     print(f"Total LLM time:                {total_llm_time:.2f}s")
-            #     print(f"Avg LLM time per window:       {total_llm_time / max(t, 1):.3f}s")
-            #     print(f"Avg objects detected per frame:{avg_objects:.1f}")
-            #     print(f"Avg detection confidence:      {avg_confidence:.2%}")
-            #     print(f"RAM used:                      {ram_used:.1f} MB")
-
-            #     if torch.cuda.is_available():
-            #         gpu_used = torch.cuda.memory_allocated() / 1024 ** 2
-            #         print(f"GPU memory used:               {gpu_used:.1f} MB")
 
         if visualize:
             visualizer.release()
