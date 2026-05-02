@@ -113,7 +113,8 @@ class ObjectDetector:
 
     def _combined_detection(self, frame, threshold: float = 0.9) -> List[Dict]:
         # Run both YOLO and DETR detections and combine results
-        yolo_results = self._yolo_detection(frame, threshold=threshold)
+        # add offset to YOLO labels to avoid conflicts with DETR labels
+        yolo_results = self._yolo_detection(frame, threshold=threshold, offset=1000)
         detr_results = self._detr_detection(frame, threshold=threshold)
 
         combined_results = yolo_results + detr_results

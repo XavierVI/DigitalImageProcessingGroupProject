@@ -163,7 +163,7 @@ class DataPipeline:
         return commentary, end_time - start_time
 
 
-    def loop(self, visualize=False, output_dir: str = "eval_videos") -> List[Tuple[int, int, str]]:
+    def loop(self, threshold=0.9, visualize=False, output_dir: str = "eval_videos") -> List[Tuple[int, int, str]]:
         """
         A loop that runs the pipeline
         indefinitely (or until the data stream ends).
@@ -208,7 +208,7 @@ class DataPipeline:
             # this returns a list of dictionaries with keys
             # "label", "score", "box", and "centroid"
             detection_start = time.time()
-            detected_obj = self.obj_detection_model.detect(frame)
+            detected_obj = self.obj_detection_model.detect(frame, threshold=threshold)
             total_detection_time += time.time() - detection_start
 
             self._append_frame(detected_obj)
@@ -220,7 +220,7 @@ class DataPipeline:
                     break
 
                 detection_start = time.time()
-                detected_obj = self.obj_detection_model.detect(frame)
+                detected_obj = self.obj_detection_model.detect(frame, threshold=threshold)
                 detected_obj = self._compute_motion(self.frames[-1], detected_obj)
                 total_detection_time += time.time() - detection_start
 

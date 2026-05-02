@@ -6,17 +6,29 @@ platforms = ["linux-64", "win-64"]
 version = "0.1.0"
 
 [tasks]
-exp = "python main.py --visualize --llm-model=Qwen/Qwen2.5-1.5B-Instruct --object-model=PekingU/rtdetr_r50vd --output-dir=data/detr_eval_videos --window-size=25"
+exp = "python main.py --llm-model=Qwen/Qwen2.5-1.5B-Instruct --object-model=PekingU/rtdetr_r50vd --output-dir=data/detr_eval_videos --window-size=25"
 
-yolo_exp = "python main.py --video-dir=data/traffic_light_detection --visualize --llm-model=Qwen/Qwen2.5-1.5B-Instruct --object-model=yolo --output-dir=traffic_light_eval --window-size=25"
+yolo_exp = "python main.py --video-dir=data/traffic_light_detection --llm-model=Qwen/Qwen2.5-1.5B-Instruct --object-model=yolo --output-dir=traffic_light_eval --window-size=25"
 
-combined_exp = "python main.py --visualize --llm-model=Qwen/Qwen2.5-1.5B-Instruct --object-model=combined --output-dir=data/combined_eval_videos --window-size=25"
+combined_exp = "python main.py --llm-model=Qwen/Qwen2.5-1.5B-Instruct --object-model=combined --output-dir=data/combined_eval_videos --window-size=25"
+
+combined_exp2 = "python main.py --video-dir=data/traffic_light_detection --visualize --llm-model=Qwen/Qwen2.5-1.5B-Instruct --object-model=combined --output-dir=data/combined_eval_videos_dataset2 --window-size=25"
 
 test = "python main.py --visualize --llm-model=Qwen/Qwen2.5-1.5B-Instruct --object-model=PekingU/rtdetr_r50vd --max-videos=1"
 
 yolo_test = "python main.py --video-dir=data/traffic_light_detection --visualize --llm-model=Qwen/Qwen2.5-1.5B-Instruct --object-model=yolo --max-videos=1 --output-dir=traffic_light_eval_test"
 
 combined_test = "python examples/full_pipeline.py --video-path=data/reddit_dashcam_videos/video_40.mp4 --output-dir=pipeline_test --visualize --object-model=combined --llm-model=Qwen/Qwen2.5-1.5B-Instruct"
+
+
+presentation_video_combined = "python examples/full_pipeline.py --video-path=data/traffic_light_detection/Video_Project_5.mp4 --output-dir=presentation_videos --visualize --object-model=combined --llm-model=Qwen/Qwen2.5-1.5B-Instruct"
+
+
+presentation_video_detr_only = "python examples/full_pipeline.py --video-path=data/traffic_light_detection/Video_Project_5.mp4 --output-dir=presentation_videos_detr_only --visualize --object-model=PekingU/rtdetr_r50vd --llm-model=Qwen/Qwen2.5-1.5B-Instruct"
+
+
+presentation_final_video = "python examples/full_pipeline.py --video-path=data/reddit_dashcam_videos/video_28.mp4 --output-dir=presentation_videos --visualize --object-model=combined --llm-model=Qwen/Qwen2.5-1.5B-Instruct"
+
 
 
 [dependencies]

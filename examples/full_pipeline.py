@@ -70,7 +70,7 @@ def run_pipeline_on_video(
         device=device,
     )
     
-    commentary = pipeline.loop(visualize=visualize, output_dir=output_dir)
+    commentary = pipeline.loop(threshold=0.7, visualize=visualize, output_dir=output_dir)
 
     print("\n" + "="*70)
     print("LLM COMMENTARY")

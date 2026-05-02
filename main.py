@@ -175,7 +175,7 @@ def run_pipeline_over_dataset(
             continue
 
         pipeline.reset()
-        llm_output = pipeline.loop(visualize=visualize, output_dir=output_dir)
+        llm_output = pipeline.loop(threshold=0.7, visualize=visualize, output_dir=output_dir)
         model_outputs[video_name] = llm_output
         perf_metrics[video_name] = pipeline.get_metrics()
         print(f"Processed {idx + 1}/{max_videos}: {video_name}")
