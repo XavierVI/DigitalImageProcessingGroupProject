@@ -192,14 +192,16 @@ def run_pipeline_over_dataset(
 
     perf_metrics["accuracy_metrics"] = results
     save_perf_metrics(perf_metrics, os.path.join(output_dir, "performance_metrics.json"))
-    print("\nEvaluation Metrics:")
-    print(f"True Positives: {results['TP']}")
-    print(f"True Negatives: {results['TN']}")
-    print(f"False Positives: {results['FP']}")
-    print(f"False Negatives: {results['FN']}")
-    print(f"Precision: {results['precision']:.4f}")
-    print(f"Recall: {results['recall']:.4f}")
-    print(f"Jaccard Index: {results['jaccard']:.4f}")
+    
+    if len(results) > 0:
+        print("\nEvaluation Metrics:")
+        print(f"True Positives: {results['TP']}")
+        print(f"True Negatives: {results['TN']}")
+        print(f"False Positives: {results['FP']}")
+        print(f"False Negatives: {results['FN']}")
+        print(f"Precision: {results['precision']:.4f}")
+        print(f"Recall: {results['recall']:.4f}")
+        print(f"Jaccard Index: {results['jaccard']:.4f}")
 
 
 def main() -> None:

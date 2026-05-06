@@ -27,11 +27,11 @@ Once the dependencies have been installed, a python script can be ran to downloa
 python -m driving_assistant.data_utils.reddit_scraper --subreddit=MildlyBadDrivers --limit=5
 ```
 
-will attempt to download 5 videos from the subreddit MildlyBadDrivers, and save them in a directory called `data/reddit_dashcam_videos`.
+will **attempt** to download 5 videos from the subreddit MildlyBadDrivers, and save them in a directory called `data/reddit_dashcam_videos`. It is not guaranteed that it will download 5 videos, because some of the Reddit posts may not have videos.
 
 
 # Running the pipeline
-After downloading a few videos, the pipeline can be ran using
+After downloading a few videos, the pipeline can be ran using the following command.
 
 ```bash
 python main.py --visualize --llm-model=Qwen/Qwen2.5-1.5B-Instruct --object-model=PekingU/rtdetr_r50vd --output-dir=eval_videos
