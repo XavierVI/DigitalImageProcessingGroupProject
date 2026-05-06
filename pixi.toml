@@ -10,9 +10,10 @@ exp = "python main.py --llm-model=Qwen/Qwen2.5-1.5B-Instruct --object-model=Peki
 
 yolo_exp = "python main.py --video-dir=data/traffic_light_detection --llm-model=Qwen/Qwen2.5-1.5B-Instruct --object-model=yolo --output-dir=traffic_light_eval --window-size=25"
 
-combined_exp = "python main.py --llm-model=Qwen/Qwen2.5-1.5B-Instruct --object-model=combined --output-dir=data/combined_eval_videos --window-size=25"
+combined_exp = "python main.py --llm-model=Qwen/Qwen2.5-1.5B-Instruct --object-model=combined --output-dir=data/combined_eval_videos --window-size=10"
 
 combined_exp2 = "python main.py --video-dir=data/traffic_light_detection --visualize --llm-model=Qwen/Qwen2.5-1.5B-Instruct --object-model=combined --output-dir=data/combined_eval_videos_dataset2 --window-size=25"
+
 
 test = "python main.py --visualize --llm-model=Qwen/Qwen2.5-1.5B-Instruct --object-model=PekingU/rtdetr_r50vd --max-videos=1"
 
@@ -21,19 +22,32 @@ yolo_test = "python main.py --video-dir=data/traffic_light_detection --visualize
 combined_test = "python examples/full_pipeline.py --video-path=data/reddit_dashcam_videos/video_40.mp4 --output-dir=pipeline_test --visualize --object-model=combined --llm-model=Qwen/Qwen2.5-1.5B-Instruct"
 
 
-presentation_video_combined = "python examples/full_pipeline.py --video-path=data/traffic_light_detection/Video_Project_5.mp4 --output-dir=presentation_videos --visualize --object-model=combined --llm-model=Qwen/Qwen2.5-1.5B-Instruct"
+presentation_video_combined = "python examples/full_pipeline.py --video-path=data/traffic_light_detection/Video_Project_5.mp4 --output-dir=presentation_videos --visualize --object-model=combined --llm-model=Qwen/Qwen2.5-1.5B-Instruct --window-size=25"
 
+presentation_video_t5 = "python examples/full_pipeline.py --video-path=data/traffic_light_detection/Video_Project_5.mp4 --output-dir=presentation_videos --visualize --object-model=combined --llm-model=google/flan-t5-small --window-size=10"
 
 presentation_video_detr_only = "python examples/full_pipeline.py --video-path=data/traffic_light_detection/Video_Project_5.mp4 --output-dir=presentation_videos_detr_only --visualize --object-model=PekingU/rtdetr_r50vd --llm-model=Qwen/Qwen2.5-1.5B-Instruct"
 
-
 presentation_final_video = "python examples/full_pipeline.py --video-path=data/reddit_dashcam_videos/video_28.mp4 --output-dir=presentation_videos --visualize --object-model=combined --llm-model=Qwen/Qwen2.5-1.5B-Instruct"
+
+
+latency_t5_small = "python main.py --visualize --llm-model=google/flan-t5-small --object-model=combined --output-dir=data/latency_t5_small --window-size=10 --max-videos=1"
+
+latency_t5_large = "python main.py --visualize --llm-model=google/flan-t5-large --object-model=combined --output-dir=data/latency_t5_large --window-size=10 --max-videos=1"
+
+latency_deep_seek = "python main.py --visualize --llm-model=deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B --object-model=combined --output-dir=data/latency_deep_seek --window-size=10 --max-videos=1"
+
+latency_phi = "python main.py --visualize --llm-model=microsoft/Phi-3.5-mini-instruct --object-model=combined --output-dir=data/latency_phi --window-size=10 --max-videos=1"
+
+latency_qwen = "python main.py --visualize --llm-model=Qwen/Qwen2.5-1.5B-Instruct --object-model=combined --output-dir=data/latency_qwen --window-size=10 --max-videos=1"
+
 
 
 
 [dependencies]
 python = ">=3.14.4,<3.15"
 pip = ">=26.0.1,<27"
+transformers = ">=5.8.0,<6"
 
 
 [pypi-dependencies]

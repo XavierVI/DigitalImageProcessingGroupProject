@@ -19,6 +19,7 @@ def run_pipeline_on_video(
     yolo_weights_path: str,
     llm_model_name: str,
     visualize: bool,
+    window_size: int = 10,
 ) -> None:
     """Run the full vision + LLM pipeline on a single video.
     
@@ -68,9 +69,11 @@ def run_pipeline_on_video(
         prompt_constructor=prompt_constructor,
         commentary_generator=commentary_generator,
         device=device,
+        window_size=window_size,
     )
     
     commentary = pipeline.loop(threshold=0.7, visualize=visualize, output_dir=output_dir)
+    metrics = pipeline.get_metrics()
 
     print("\n" + "="*70)
     print("LLM COMMENTARY")
@@ -109,6 +112,12 @@ def main() -> None:
         help="Hugging Face model id for commentary generation.",
     )
     parser.add_argument(
+        "--window-size",
+        default=10,
+        type=int,
+        help="Time window size in seconds for matching predictions to labels when computing metrics.",
+    )
+    parser.add_argument(
         "--visualize",
         action="store_true",
         help="Show frame visualizations while running.",
@@ -126,6 +135,7 @@ def main() -> None:
         yolo_weights_path=args.yolo_weights_path,
         llm_model_name=args.llm_model,
         visualize=args.visualize,
+        window_size=args.window_size,
     )
 
 

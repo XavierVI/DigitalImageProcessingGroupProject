@@ -33,12 +33,9 @@ class ObjectDetector:
             device: torch.device to use for inference
         """
         self.device = device
-        # loading models
-        # Load Object Detection Model (DETR)
-        model = "PekingU/rtdetr_r50vd"
-        # model = "facebook/detr-resnet-50"
 
         if obj_detection_model == "facebook/detr-resnet-50":
+            model = "facebook/detr-resnet-50"
             self.processor = DetrImageProcessor.from_pretrained(
                 model,
                 cache_dir=os.path.join(os.getcwd(), "models")
@@ -52,6 +49,7 @@ class ObjectDetector:
             self.obj_det_model.eval()
 
         elif obj_detection_model == "PekingU/rtdetr_r50vd":
+            model = "PekingU/rtdetr_r50vd"
             self.processor = RTDetrImageProcessor.from_pretrained(
                 model,
                 cache_dir=os.path.join(os.getcwd(), "models")

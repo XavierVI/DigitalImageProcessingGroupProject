@@ -153,6 +153,7 @@ def run_pipeline_over_dataset(
         prompt_constructor=prompt_constructor,
         commentary_generator=commentary_generator,
         device=device,
+        window_size=window_size,
     )
 
     manual_labels = load_labels(labels_path)
@@ -182,11 +183,13 @@ def run_pipeline_over_dataset(
 
     print("\nPipeline run complete.")
 
-    if not manual_labels:
-        print(f"No labels found at {labels_path}. Skipping metric computation.")
-        return
 
-    results = calculate_metrics(manual_labels, model_outputs)
+    if len(manual_labels) > 0:
+        results = calculate_metrics(manual_labels, model_outputs)
+    else:
+        print("No manual labels found. Skipping metric computation.")
+        results = {}
+
     perf_metrics["accuracy_metrics"] = results
     save_perf_metrics(perf_metrics, os.path.join(output_dir, "performance_metrics.json"))
     print("\nEvaluation Metrics:")

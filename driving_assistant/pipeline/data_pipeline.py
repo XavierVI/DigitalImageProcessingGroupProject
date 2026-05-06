@@ -228,18 +228,20 @@ class DataPipeline:
                 frame_count += 1
                 total_time = total_detection_time
 
-                if visualize:
-                    metrics = {
-                        "fps": frame_count / total_time if total_time > 0 else 0,
-                        "obj_count": len(detected_obj),
-                        "avg_det_ms": (total_detection_time / frame_count) * 1000,
-                        "avg_llm_ms": (total_llm_time / max(t, 1)) * 1000,
-                    }
-                    # Track min/max for tail performance
-                    self.max_detection_time = max(self.max_detection_time, metrics["avg_det_ms"])
-                    self.max_llm_time = max(self.max_llm_time, metrics["avg_llm_ms"])
-                    self.min_fps = min(self.min_fps, metrics["fps"])
+                metrics = {
+                    "fps": frame_count / total_time if total_time > 0 else 0,
+                    "obj_count": len(detected_obj),
+                    "avg_det_ms": (total_detection_time / frame_count) * 1000,
+                    "avg_llm_ms": (total_llm_time / max(t, 1)) * 1000,
+                }
+                # Track min/max for tail performance
+                self.max_detection_time = max(
+                    self.max_detection_time, metrics["avg_det_ms"])
+                self.max_llm_time = max(
+                    self.max_llm_time, metrics["avg_llm_ms"])
+                self.min_fps = min(self.min_fps, metrics["fps"])
 
+                if visualize:
                     visualizer.update(
                         frame, detected_obj,
                         metrics=metrics,

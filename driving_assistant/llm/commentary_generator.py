@@ -61,17 +61,17 @@ class CommentaryGenerator:
             self.tokenizer = AutoTokenizer.from_pretrained(
                 hugging_face_model,
                 cache_dir=os.path.join(os.getcwd(), "models"),
-                trust_remote_code=True
+                # trust_remote_code=True
             )
-            if self.tokenizer.pad_token is None:
-                self.tokenizer.pad_token = self.tokenizer.eos_token
+            # if self.tokenizer.pad_token is None:
+            #     self.tokenizer.pad_token = self.tokenizer.eos_token
 
             self.model = AutoModelForCausalLM.from_pretrained(
                 hugging_face_model,
                 cache_dir=os.path.join(os.getcwd(), "models"),
                 dtype=torch.float16,
-                trust_remote_code=True,
-                attn_implementation = "eager",
+                # trust_remote_code=True,
+                attn_implementation = "sdpa",
                 # force_download = True
             )
             self.commentary_method = self._llm_generate
@@ -140,7 +140,7 @@ class CommentaryGenerator:
         )
 
 
-    def generate(self, prompt: str) -> dict:
+    def generate(self, prompt) -> dict:
         """Generate commentary from a prompt.
 
         Args:
@@ -150,7 +150,7 @@ class CommentaryGenerator:
         """
         return self.commentary_method(prompt)
 
-    def _llm_generate(self, prompt: str) -> dict:
+    def _llm_generate(self, prompt) -> dict:
         messages = [
             {"role": "system", "content": prompt["system"]},
             {"role": "user", "content": prompt["user"]}
@@ -187,7 +187,7 @@ class CommentaryGenerator:
             return {"warning": False, "message": ""}
 
 
-    def _t5_generate(self, prompt: str) -> str:
+    def _t5_generate(self, prompt) -> str:
         """Generate commentary from a prompt.
 
         Args:
@@ -197,6 +197,7 @@ class CommentaryGenerator:
         Returns:
             str: Generated commentary text
         """
+        prompt = f"Instructions: {prompt['system']} Context: {prompt['user']}"
         # Tokenize input
         inputs = self.tokenizer(
             prompt,

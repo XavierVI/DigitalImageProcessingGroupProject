@@ -1,7 +1,7 @@
 accelerate==1.13.0
 -e git+ssh://git@github.com/COMPASS-PSAAP/AI-Performance-Modeling.git@1d4564b1ddab87f1952fb95ddd27127a292f3c34#egg=ai_performance_modeling
-annotated-doc==0.0.4
-anyio==4.13.0
+annotated-doc @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_annotated-doc_1762868213/work
+anyio @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_anyio_1774359453/work
 argon2-cffi==25.1.0
 argon2-cffi-bindings==25.1.0
 arrow==1.4.0
@@ -12,10 +12,11 @@ babel==2.18.0
 beautifulsoup4==4.14.3
 bitsandbytes==0.49.2
 bleach==6.3.0
-certifi==2026.2.25
+Brotli @ file:///home/conda/feedstock_root/build_artifacts/brotli-split_1764016952863/work
+certifi @ file:///home/conda/feedstock_root/build_artifacts/certifi_1776866578774/work/certifi
 cffi==2.0.0
-charset-normalizer==3.4.7
-click==8.3.2
+charset-normalizer @ file:///home/conda/feedstock_root/build_artifacts/charset-normalizer_1775127091311/work
+click @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_click_1777219902/work
 comm==0.2.3
 contourpy==1.3.3
 cuda-bindings==13.2.0
@@ -25,19 +26,23 @@ cycler==0.12.1
 debugpy==1.8.20
 decorator==5.2.1
 defusedxml==0.7.1
--e git+ssh://git@github.com/XavierVI/DigitalImageProcessingGroupProject.git@677108904cfd59a56020b78abb71490db05b44eb#egg=driving_assistant
+-e git+ssh://git@github.com/XavierVI/DigitalImageProcessingGroupProject.git@3b48c163ddf965cdbb3c7eb23b3f09bea4807a76#egg=driving_assistant
+exceptiongroup @ file:///home/conda/feedstock_root/build_artifacts/exceptiongroup_1763918002538/work
 executing==2.2.1
 fastjsonschema==2.21.2
-filelock==3.28.0
+filelock @ file:///home/conda/feedstock_root/build_artifacts/filelock_1776621385265/work
 fonttools==4.62.1
 fqdn==1.5.1
-fsspec==2026.3.0
-h11==0.16.0
-hf-xet==1.4.3
-httpcore==1.0.9
-httpx==0.28.1
-huggingface_hub==1.10.2
-idna==3.11
+fsspec @ file:///home/conda/feedstock_root/build_artifacts/fsspec_1777547723461/work
+h11 @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_h11_1767729720/work
+h2 @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_h2_1756364871/work
+hf-xet @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_hf-xet_1775006270/work/hf_xet
+hpack @ file:///home/conda/feedstock_root/build_artifacts/hpack_1737618293087/work
+httpcore @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_httpcore_1745602916/work
+httpx @ file:///home/conda/feedstock_root/build_artifacts/httpx_1733663348460/work
+huggingface_hub @ file:///home/conda/feedstock_root/build_artifacts/huggingface_hub_1777560834345/work
+hyperframe @ file:///home/conda/feedstock_root/build_artifacts/hyperframe_1737618333194/work
+idna @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_idna_1776947141/work
 iniconfig==2.3.0
 ipykernel==7.2.0
 ipython==9.12.0
@@ -60,11 +65,11 @@ jupyterlab_pygments==0.3.0
 jupyterlab_server==2.28.0
 kiwisolver==1.5.0
 lark==1.3.1
-markdown-it-py==4.0.0
+markdown-it-py @ file:///home/conda/feedstock_root/build_artifacts/markdown-it-py_1754951200865/work
 MarkupSafe==3.0.3
 matplotlib==3.10.8
 matplotlib-inline==0.2.1
-mdurl==0.1.2
+mdurl @ file:///home/conda/feedstock_root/build_artifacts/mdurl_1733255585584/work
 mistune==3.2.0
 mpmath==1.3.0
 nbclient==0.10.4
@@ -73,7 +78,7 @@ nbformat==5.10.4
 nest-asyncio==1.6.0
 networkx==3.6.1
 notebook_shim==0.2.4
-numpy==2.4.4
+numpy @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_numpy_1773839233/work/dist/numpy-2.4.3-cp314-cp314-linux_x86_64.whl#sha256=6eb2afeda12a350c8edfe8e03390cb0fef390c41968b4fa3fb97600ab233bf2c
 nvidia-cublas==13.1.0.3
 nvidia-cuda-cupti==13.0.85
 nvidia-cuda-nvrtc==13.0.88
@@ -90,7 +95,7 @@ nvidia-nvjitlink==13.0.88
 nvidia-nvshmem-cu13==3.4.5
 nvidia-nvtx==13.0.85
 opencv-python==4.13.0.92
-packaging==26.1
+packaging @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_packaging_1777103621/work
 pandocfilters==1.5.1
 parso==0.8.6
 pexpect==4.9.0
@@ -108,48 +113,50 @@ psutil==7.2.2
 ptyprocess==0.7.0
 pure_eval==0.2.3
 pycparser==3.0
-Pygments==2.20.0
+Pygments @ file:///home/conda/feedstock_root/build_artifacts/pygments_1774796700044/work
 pyparsing==3.3.2
+PySocks @ file:///home/conda/feedstock_root/build_artifacts/pysocks_1733217236728/work
 pytest==9.0.3
 python-dateutil==2.9.0.post0
 python-json-logger==4.1.0
-PyYAML==6.0.3
+PyYAML @ file:///home/conda/feedstock_root/build_artifacts/pyyaml_1770223234623/work
 pyzmq==27.1.0
 referencing==0.37.0
-regex==2026.4.4
-requests==2.33.1
+regex @ file:///home/conda/feedstock_root/build_artifacts/regex_1775259188777/work
+requests @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_requests_1777030058/work
 rfc3339-validator==0.1.4
 rfc3986-validator==0.1.1
 rfc3987-syntax==1.1.0
-rich==15.0.0
+rich @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_rich_1775991661/work/dist
 rpds-py==0.30.0
-safetensors==0.7.0
+safetensors @ file:///home/conda/feedstock_root/build_artifacts/safetensors_1763569464465/work
 scipy==1.17.1
 Send2Trash==2.1.0
 setuptools==81.0.0
-shellingham==1.5.4
+shellingham @ file:///home/conda/feedstock_root/build_artifacts/shellingham_1762858192781/work
 six==1.17.0
+sniffio @ file:///home/conda/feedstock_root/build_artifacts/sniffio_1762941432086/work
 soupsieve==2.8.3
 stack-data==0.6.3
 sympy==1.14.0
 terminado==0.18.1
 tinycss2==1.4.0
-tokenizers==0.22.2
+tokenizers @ file:///home/conda/feedstock_root/build_artifacts/tokenizers_1764694742685/work/bindings/python
 torch==2.11.0
 torchvision==0.26.0
 tornado==6.5.5
-tqdm==4.67.3
+tqdm @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_tqdm_1770153424/work
 traitlets==5.14.3
-transformers==5.5.4
+transformers @ file:///home/conda/feedstock_root/build_artifacts/transformers_1778033715188/work
 triton==3.6.0
-typer==0.24.1
-typing_extensions==4.15.0
+typer @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_typer_1777583624/work
+typing_extensions @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_typing_extensions_1756220668/work
 tzdata==2026.1
 ultralytics==8.4.45
 ultralytics-thop==2.0.19
 update-checker==0.18.0
 uri-template==1.3.0
-urllib3==2.6.3
+urllib3 @ file:///home/conda/feedstock_root/build_artifacts/urllib3_1767817748113/work
 wcwidth==0.6.0
 webcolors==25.10.0
 webencodings==0.5.1

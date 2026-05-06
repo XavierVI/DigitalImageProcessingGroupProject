@@ -59,6 +59,23 @@ class Visualizer:
 
         self.writer.write(annotated)
 
+    def _wrap_text(self, text, font, font_scale, thickness, max_width):
+        words = text.split()
+        lines = []
+        current = ""
+        for word in words:
+            test = f"{current} {word}".strip()
+            (w, _), _ = cv2.getTextSize(test, font, font_scale, thickness)
+            if w <= max_width:
+                current = test
+            else:
+                if current:
+                    lines.append(current)
+                current = word
+        if current:
+            lines.append(current)
+        return lines
+
     def _draw_overlay(self, frame, detected_obj, metrics=None, commentary=None):
         # Draw into a copy so we do not mutate the original frame.
         annotated = frame.copy()
@@ -129,13 +146,26 @@ class Visualizer:
 
         # add commentary at the bottom if it exists
         if commentary:
-            sub_h = int(self.height * 0.1)
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            font_scale = 0.7
+            thickness = 2
+            margin = 30
+            max_width = self.width - 2 * margin
+
+            lines = self._wrap_text(commentary, font, font_scale, thickness, max_width)
+            line_height = cv2.getTextSize("A", font, font_scale, thickness)[0][1] + 10
+
+            sub_h = max(int(self.height * 0.1), line_height * len(lines) + 20)
             overlay = annotated.copy()
             cv2.rectangle(overlay, (0, self.height - sub_h),
-                          (self.width, self.height), (0, 0, 0), -1)
+                        (self.width, self.height), (0, 0, 0), -1)
             cv2.addWeighted(overlay, 0.6, annotated, 0.4, 0, annotated)
-            cv2.putText(annotated, commentary, (30, self.height - int(sub_h/2.5)),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
+
+            y = self.height - sub_h + line_height
+            for line in lines:
+                cv2.putText(annotated, line, (margin, y),
+                            font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
+                y += line_height
 
         return annotated
 
