@@ -117,7 +117,12 @@ class ObjectDetector:
         yolo_results = self._yolo_detection(frame, threshold=threshold, offset=1000)
         detr_results = self._detr_detection(frame, threshold=threshold)
 
-        combined_results = yolo_results + detr_results
+        # filter out stop signs and traffic lights
+        detr_results = [
+            obj for obj in detr_results
+            if obj["label"] not in ["stop sign", "traffic light"]
+        ]
+        combined_results = detr_results + yolo_results
         return combined_results
 
 
@@ -173,7 +178,8 @@ class ObjectDetector:
                 "score": round(float(score), 3),
                 "box": torch.round(box, decimals=2).tolist(),
                 "centroid": torch.round(centroid, decimals=2).tolist(),
-                "area": round(float((box[2] - box[0]) * (box[3] - box[1])), 2)
+                "area": round(float((box[2] - box[0]) * (box[3] - box[1])), 2),
+                "source": "yolo"
             }
             for box, score, class_id, centroid in zip(xyxy, scores, class_ids, centroids)
         ]
@@ -223,7 +229,8 @@ class ObjectDetector:
                 "score": sc,
                 "box": bx,
                 "centroid": ct,
-                "area": round(float((bx[2] - bx[0]) * (bx[3] - bx[1])), 2)
+                "area": round(float((bx[2] - bx[0]) * (bx[3] - bx[1])), 2),
+                "source": "detr"
             }
             for lbl, sc, bx, ct in
             zip(labels_list, scores_list, boxes_list, centroids_list)

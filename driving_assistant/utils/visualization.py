@@ -65,11 +65,20 @@ class Visualizer:
 
         for obj in detected_obj:
             bx = [int(i) for i in obj["box"]]
+
+            # choose color based on source of detection
+            if obj.get("source") == "yolo":
+                color = (0, 165, 255)  # Orange for YOLO
+                text_color = (0, 165, 255)
+            elif obj.get("source") == "detr":
+                color = (255, 0, 0)  # Blue for DETR
+                text_color = (255, 0, 0)
+
             cv2.rectangle(
                 annotated,
                 (bx[0], bx[1]),
                 (bx[2], bx[3]),
-                (255, 0, 0),
+                color,
                 2,
             )
 
@@ -81,7 +90,7 @@ class Visualizer:
                     annotated,
                     c,
                     end_point,
-                    (0, 255, 0),
+                    (0, 255, 0), # Green for motion vector
                     2,
                     tipLength=0.3,
                 )
@@ -92,7 +101,7 @@ class Visualizer:
                 (bx[0], max(20, bx[1] - 10)),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.6,
-                (255, 0, 0),
+                text_color, 
                 2,
                 cv2.LINE_AA,
             )
