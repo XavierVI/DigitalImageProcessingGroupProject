@@ -21,7 +21,7 @@ If using [pixi](https://pixi.prefix.dev/latest/), you can install the project an
 
 
 # Data Collection
-Once the dependencies have been installed, a python script can be ran to download a few videos to run on the pipeline. As an example, running
+Once the dependencies have been installed, a python script can be ran to download a few videos to run on the pipeline (optional). As an example, running
 
 ```bash
 python -m driving_assistant.data_utils.reddit_scraper --subreddit=MildlyBadDrivers --limit=5
